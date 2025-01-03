@@ -1,0 +1,14 @@
+# Hyperbolic space configuration
+defaults:
+  - base
+
+environment:
+  manifold_type: "hyperbolic"
+  params:
+    k: -1.0  # Curvature
+
+training:
+  # Hyperbolic-specific adjustments
+  learning_rate: 4.0e-4  # Higher learning rate for larger space
+  target_kl: 0.02       # Allow more exploration in hyperbolic space
+  gamma: 0.995          # Longer horizon for exploration

@@ -1,0 +1,13 @@
+# Sphere configuration
+defaults:
+  - base
+
+environment:
+  manifold_type: "sphere"
+  params:
+    radius: 2.0
+
+training:
+  # Sphere-specific adjustments
+  learning_rate: 2.0e-4  # Lower learning rate for stable learning on sphere
+  clip_ratio: 0.15      # Tighter clipping due to bounded space

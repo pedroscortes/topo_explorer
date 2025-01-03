@@ -1,0 +1,31 @@
+# Base configuration for training
+
+environment:
+  max_episode_steps: 1000
+
+agent:
+  state_dim: 7  # position (3) + curvature (1) + frame (2) + exploration (1)
+  action_dim: 3  # tangent vector in R³
+  hidden_dim: 128
+  num_layers: 3
+
+training:
+  total_steps: 1000000
+  steps_per_epoch: 2048
+  buffer_size: 2048
+  batch_size: 64
+  learning_rate: 3.0e-4
+  gamma: 0.99
+  gae_lambda: 0.95
+  clip_ratio: 0.2
+  target_kl: 0.01
+  num_epochs: 10
+  eval_episodes: 10
+  save_frequency: 50
+  print_frequency: 10
+
+visualization:
+  render_mode: "human"
+  window_size: [800, 600]
+  frame_scale: 0.3
+  show_curvature: true

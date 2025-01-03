@@ -1,0 +1,21 @@
+# Core dependencies
+torch>=2.0.0
+numpy>=1.21.0
+matplotlib>=3.4.0
+scipy>=1.7.0
+plotly>=5.0.0
+trimesh>=3.9.0
+gymnasium>=0.26.0
+pytorch-geometric>=2.0.0
+pyyaml>=5.4.0
+
+# Development dependencies
+pytest>=6.0
+black>=21.0
+isort>=5.0
+flake8>=3.9
+jupyter>=1.0
+
+# Optional visualization dependencies
+three.js>=0.125.0
+flask>=2.0.0

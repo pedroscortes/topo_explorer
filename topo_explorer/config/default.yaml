@@ -1,0 +1,45 @@
+# Default configuration for topo_explorer
+
+environment:
+  manifold_type: "sphere"  # Type of manifold to use
+  params:
+    radius: 2.0           # For sphere
+    R: 3.0               # For torus (major radius)
+    r: 1.0               # For torus (minor radius)
+    width: 1.0           # For mobius strip
+    dimension: 2         # For n-torus
+  
+  max_episode_steps: 500  # Maximum steps per episode
+  reward_scale: 1.0       # Scaling factor for rewards
+
+visualization:
+  render_mode: "human"    # "human" or "rgb_array"
+  window_size: [800, 600] # Width, height of rendering window
+  frame_scale: 0.3        # Scale for frame vectors
+  show_curvature: true    # Whether to show curvature plot
+  colors:
+    trajectory: "red"
+    frame1: "blue"
+    frame2: "green"
+    surface: "gray"
+  alpha: 0.2             # Transparency for surface
+
+training:
+  algorithm: "ppo"        # RL algorithm to use
+  num_episodes: 1000      # Number of episodes to train
+  batch_size: 64          # Batch size for training
+  learning_rate: 0.001    # Learning rate
+  gamma: 0.99            # Discount factor
+  gae_lambda: 0.95       # GAE parameter
+  clip_range: 0.2        # PPO clip range
+  
+  # Neural network architecture
+  network:
+    hidden_sizes: [64, 64]
+    activation: "relu"
+    
+logging:
+  log_dir: "logs"        # Directory for logs
+  save_frequency: 100    # How often to save models
+  eval_frequency: 50     # How often to evaluate
+  verbose: true         # Whether to print training progress

@@ -1,0 +1,17 @@
+Metadata-Version: 2.1
+Name: topo_explorer
+Version: 0.1.0
+Summary: A framework for exploring topological spaces with reinforcement learning
+Author: Pedro Cortes
+Requires-Python: >=3.7
+Requires-Dist: numpy>=1.19.0
+Requires-Dist: torch>=1.9.0
+Requires-Dist: matplotlib>=3.3.0
+Requires-Dist: gymnasium>=0.26.0
+Requires-Dist: pyyaml>=5.4.1
+Provides-Extra: dev
+Requires-Dist: pytest>=6.0; extra == "dev"
+Requires-Dist: black>=21.0; extra == "dev"
+Requires-Dist: isort>=5.0; extra == "dev"
+
+A framework for exploring and learning on geometric manifolds using reinforcement learning.

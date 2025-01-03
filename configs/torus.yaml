@@ -1,0 +1,15 @@
+# Torus configuration
+defaults:
+  - base
+
+environment:
+  manifold_type: "torus"
+  params:
+    R: 3.0  # Major radius
+    r: 1.0  # Minor radius
+
+training:
+  # Torus-specific adjustments
+  learning_rate: 3.0e-4
+  steps_per_epoch: 2048  # More steps per epoch for larger space
+  target_kl: 0.015      # Allow more exploration
