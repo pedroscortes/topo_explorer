@@ -98,8 +98,24 @@ class GeometricAgent(nn.Module):
         
         return log_probs, state_values.squeeze(-1), entropy
     
+    def compute_metrics(self,
+                    states: torch.Tensor,  
+                    actions: torch.Tensor,
+                    returns: torch.Tensor) -> Dict[str, float]:
+        """Compute training metrics."""
+        _, values, _ = self.evaluate_actions(states, actions)
+        value_error = (values - returns).abs().mean()
+        
+        dist = self.get_distribution(states)
+        action_std = dist.stddev.mean()
+        
+        return {
+            'value_error': value_error.item(),
+            'action_std': action_std.item(),
+            'mean_return': returns.mean().item()
+        }
+    
     def update(self, batch: Dict[str, Any]) -> Dict[str, float]:
-        """Update agent parameters using PPO."""
         states = torch.FloatTensor(batch['states'])
         actions = torch.FloatTensor(batch['actions'])
         old_log_probs = torch.FloatTensor(batch['old_log_probs'])
@@ -111,23 +127,20 @@ class GeometricAgent(nn.Module):
         log_probs, values, entropy = self.evaluate_actions(states, actions)
         
         ratio = torch.exp(log_probs - old_log_probs)
-        clip_ratio = torch.clamp(ratio, 0.8, 1.2)
-        policy_loss = -torch.min(
-            ratio * advantages,
-            clip_ratio * advantages
-        ).mean()
+        clip_ratio = torch.clamp(ratio, 0.9, 1.1)  
+        policy_loss = -torch.min(ratio * advantages, clip_ratio * advantages).mean()
         
         value_pred = values
         value_target = returns
-        value_loss = F.mse_loss(value_pred, value_target)
+        value_loss = 0.1 * F.mse_loss(value_pred, value_target)  
         
         entropy_loss = -entropy.mean()
         
-        loss = policy_loss + 0.5 * value_loss + 0.01 * entropy_loss
+        loss = policy_loss + value_loss + 0.01 * entropy_loss
         
         self.optimizer.zero_grad()
         loss.backward()
-        torch.nn.utils.clip_grad_norm_(self.parameters(), self.clip_grad_norm)
+        torch.nn.utils.clip_grad_norm_(self.parameters(), 0.25)  
         self.optimizer.step()
         
         return {

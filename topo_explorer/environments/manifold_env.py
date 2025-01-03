@@ -70,6 +70,7 @@ class ManifoldEnvironment(gym.Env):
                 dtype=np.float32
             )
         })
+        self.rewards = []
 
     def _default_params(self) -> dict:
         """Define default parameters for each manifold type."""
@@ -255,6 +256,9 @@ class ManifoldEnvironment(gym.Env):
         self.frame = self.parallel_transport(self.frame, new_position - old_position)
         
         reward = self.compute_reward(old_position, new_position)
+
+        self.rewards.append(reward)
+        terminated = self._should_terminate()
         
         observation = {
             'position': self.current_position,
@@ -262,7 +266,7 @@ class ManifoldEnvironment(gym.Env):
             'curvature': np.array([self.gaussian_curvature(self.current_position)])
         }
         
-        terminated = len(self.trajectory) >= 500  
+        terminated = self._should_terminate() or len(self.trajectory) >= 500 
         truncated = False
         
         info = {
@@ -281,80 +285,24 @@ class ManifoldEnvironment(gym.Env):
         cos_angle = np.clip(np.dot(v1, v2) / norm_prod, -1.0 + eps, 1.0 - eps)
         return np.arccos(cos_angle)
     
-    def compute_reward(self, old_pos: np.ndarray, new_pos: np.ndarray) -> float:
-        """
-        Compute reward based on exploration and geometric properties.
+    def _get_coverage(self):
+        points = np.array(self.trajectory)
+        dist_matrix = np.linalg.norm(points[:, None] - points, axis=2)
+        max_possible = 2 * self.params['radius'] 
+        return np.mean(dist_matrix) / max_possible
+    
+    def compute_reward(self, old_pos, new_pos):
+        step_reward = np.linalg.norm(new_pos - old_pos) / self.params['radius']
         
-        Args:
-            old_pos: Previous position on manifold
-            new_pos: New position on manifold
+        prev_points = np.array(self.trajectory[:-1])
+        prev_coverage = np.mean(np.max(np.linalg.norm(prev_points[None] - prev_points[:, None], axis=-1), axis=1))
         
-        Returns:
-            float: Computed reward value
-        """
-        if self.manifold_type == 'sphere':
-            r = self.params['radius']
-            eps = 1e-8
-            
-            norm_prod = np.linalg.norm(old_pos) * np.linalg.norm(new_pos)
-            if norm_prod < eps:
-                movement_reward = 0.0
-            else:
-                cos_angle = np.clip(np.dot(old_pos, new_pos) / norm_prod, -1.0 + eps, 1.0 - eps)
-                geodesic_dist = r * np.arccos(cos_angle)
-                movement_reward = geodesic_dist
-            
-            exploration_reward = 0.0
-            coverage_reward = 0.0
-            
-            if len(self.trajectory) > 1:
-                trajectory_array = np.array(self.trajectory[:-1])
-                dists_to_history = np.linalg.norm(trajectory_array - new_pos, axis=1)
-                min_dist = np.min(dists_to_history)
-                mean_dist = np.mean(dists_to_history)
-                exploration_reward = min_dist * 2.0 + mean_dist * 0.5
-                
-                if len(self.trajectory) > 2:
-                    prev_dir = self.trajectory[-2] - self.trajectory[-3]
-                    curr_dir = new_pos - self.trajectory[-2]
-                    angle = self._safe_angle(prev_dir, curr_dir)
-                    coverage_reward = np.sin(angle)
-            
-            smoothness_penalty = 0.0
-            if len(self.trajectory) > 2:
-                last_three = np.array(self.trajectory[-3:] + [new_pos])
-                diffs = np.diff(last_three, axis=0)
-                angles = []
-                for i in range(len(diffs) - 1):
-                    angle = self._safe_angle(diffs[i], diffs[i+1])
-                    angles.append(angle)
-                smoothness_penalty = np.sum(angles) * 0.1
-            
-            progress_penalty = 1.0 if movement_reward < 0.1 * r else 0.0
-            
-            area_reward = 0.0
-            if len(self.trajectory) > 10:
-                recent_positions = np.array(self.trajectory[-10:] + [new_pos])
-                pdist = np.zeros((len(recent_positions), len(recent_positions)))
-                for i in range(len(recent_positions)):
-                    for j in range(i+1, len(recent_positions)):
-                        angle = self._safe_angle(recent_positions[i], recent_positions[j])
-                        pdist[i,j] = pdist[j,i] = angle
-                area_reward = np.mean(pdist) * r * 0.5
-            
-            total_reward = (
-                movement_reward * 1.0 +       
-                exploration_reward * 2.0 +    
-                coverage_reward * 1.0 +       
-                area_reward * 1.0 -           
-                smoothness_penalty * 1.0 -    
-                progress_penalty * 0.5        
-            )
-            
-            total_reward = np.clip(total_reward, -10.0, 10.0)
-            return float(total_reward)
-            
-        return 0.0
+        curr_points = np.array(self.trajectory)
+        curr_coverage = np.mean(np.max(np.linalg.norm(curr_points[None] - curr_points[:, None], axis=-1), axis=1))
+        
+        coverage_gain = curr_coverage - prev_coverage
+        
+        return float(np.clip(step_reward + 5.0 * coverage_gain, -1.0, 1.0))
 
     def reset(self, seed: Optional[int] = None, options: Optional[Dict] = None) -> Tuple[Dict, Dict]:
         """
@@ -371,6 +319,7 @@ class ManifoldEnvironment(gym.Env):
         self.current_position = self._random_point()
         self.trajectory = [self.current_position]
         self.frame = self._initial_frame()
+        self.rewards = []
         
         observation = {
             'position': self.current_position,
@@ -390,6 +339,23 @@ class ManifoldEnvironment(gym.Env):
     def close(self):
         """Clean up resources."""
         plt.close()
+
+    def _should_terminate(self):
+        if len(self.trajectory) < 100:
+            return False
+            
+        coverage = self._get_coverage()
+        return (len(self.trajectory) >= 150 or 
+                coverage > 0.85)
+    
+    def _get_state_representation(self, state):
+        velocity = state['new_position'] - state['old_position'] if 'old_position' in state else np.zeros(3)
+        return np.concatenate([
+            state['position'],
+            velocity,
+            state['frame'].flatten(),
+            [state['curvature']]
+        ])
  
     def get_visualization_data(self) -> dict:
         """Get data needed for visualization."""

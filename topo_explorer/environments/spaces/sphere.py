@@ -76,17 +76,27 @@ class SphereManifold(BaseManifold):
         """Return constant step size relative to radius."""
         return 0.1 * self.params['radius']
     
-    def compute_reward(self, 
-                      old_pos: np.ndarray, 
-                      new_pos: np.ndarray) -> float:
-        """Compute reward based on distance moved."""
+    def compute_reward(self, old_pos: np.ndarray, new_pos: np.ndarray) -> float:
+        """Compute reward based on distance moved and curvature discovery."""
         distance_moved = np.linalg.norm(new_pos - old_pos)
+        angular_distance = np.arccos(np.clip(np.dot(old_pos, new_pos) / (self.params['radius'] ** 2), -1.0, 1.0))
         
-        cos_angle = np.dot(old_pos, new_pos) / (self.params['radius'] ** 2)
-        cos_angle = np.clip(cos_angle, -1.0, 1.0) 
-        angular_distance = np.arccos(cos_angle)
+        curvature = self.gaussian_curvature(new_pos)
+        exploration_bonus = 1.0 if not self._is_previously_visited(new_pos) else 0.0
+        geodesic_alignment = np.abs(np.dot(new_pos - old_pos, self.project_to_tangent(old_pos, new_pos - old_pos)))
         
-        return distance_moved + 0.5 * angular_distance
+        return (0.3 * distance_moved + 
+                0.3 * angular_distance + 
+                0.2 * curvature + 
+                0.1 * exploration_bonus +
+                0.1 * geodesic_alignment)
+    
+    def should_terminate(self, point: np.ndarray, step_count: int, total_reward: float) -> bool:
+        distance_from_start = np.linalg.norm(point - self.initial_point)
+        has_explored = distance_from_start > 0.5 * self.params['radius']
+        return (step_count >= 200 or  
+                total_reward < -50.0 or  
+                (total_reward > 50.0 and has_explored)) 
     
     def get_visualization_data(self) -> Dict:
         """Return data for visualizing the sphere."""

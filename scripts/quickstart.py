@@ -33,8 +33,8 @@ def main():
     learner = GeometricLearner(
         env=env,
         agent=agent,
-        buffer_size=1000,
-        batch_size=64
+        buffer_size=2048,
+        batch_size=128
     )
     
     print("Starting training loop...")

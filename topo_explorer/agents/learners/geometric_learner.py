@@ -163,16 +163,14 @@ class GeometricLearner(BaseLearner):
         return advantages, returns
     
     def train_step(self) -> Dict[str, float]:
-        """
-        Perform one training step using PPO with geometric considerations.
-        
-        Returns:
-            Dictionary of training metrics
-        """
+        """Perform one training step using PPO."""
+        if len(self.buffer['states']) < self.batch_size:
+            return {}
+            
         advantages, returns = self.compute_advantages()
         
         states = np.array([self._get_state_representation(s) 
-                          for s in self.buffer['states']])
+                        for s in self.buffer['states']])
         actions = np.array(self.buffer['actions'])
         old_log_probs = np.array(self.buffer['log_probs'])
         
@@ -186,29 +184,39 @@ class GeometricLearner(BaseLearner):
         }
         
         metrics = defaultdict(list)
+        early_stop = False
         
         for epoch in range(self.num_epochs):
+            if early_stop:
+                break
+                
             indices = np.random.permutation(len(states))
             
             for start in range(0, len(states), self.batch_size):
-                end = start + self.batch_size
-                batch_indices = indices[start:end]
-                
-                batch = {
-                    k: v[batch_indices] for k, v in dataset.items()
-                }
+                batch_indices = indices[start:min(start + self.batch_size, len(states))]
+                batch = {k: v[batch_indices] for k, v in dataset.items()}
                 
                 update_metrics = self.agent.update(batch)
                 
+                states_tensor = torch.FloatTensor(batch['states'])
+                with torch.no_grad():
+                    old_dist = self.agent.get_distribution(states_tensor)
+                    new_dist = self.agent.get_distribution(states_tensor)
+                    kl = torch.distributions.kl_divergence(old_dist, new_dist).mean()
+                    
+                    if kl > self.target_kl:
+                        early_stop = True
+                        break
+                        
                 for k, v in update_metrics.items():
-                    metrics[f'{k}_epoch_{epoch}'].append(v)
+                    metrics[k].append(v)
         
-        avg_metrics = {}
-        for k, v in metrics.items():
-            avg_metrics[k] = np.mean(v)
+        avg_metrics = {
+            k: np.mean(v) for k, v in metrics.items() 
+            if len(v) > 0  
+        }
         
         self.reset_buffer()
-        
         return avg_metrics
     
     def evaluate(self, num_episodes: int = 10) -> Dict[str, float]:

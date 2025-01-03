@@ -72,3 +72,8 @@ class BaseManifold(ABC):
     def get_visualization_data(self) -> Dict:
         """Return data needed for visualization."""
         pass
+
+    @abstractmethod
+    def should_terminate(self, point: np.ndarray, step_count: int, total_reward: float) -> bool:
+        """Determine if episode should end."""
+        pass
