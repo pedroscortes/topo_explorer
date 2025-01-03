@@ -13,11 +13,10 @@ class ProjectiveManifold(BaseManifold):
     """
     
     def _default_params(self) -> Dict:
-        return {'radius': 1.0}  # Unit sphere for canonical representation
+        return {'radius': 1.0}  
     
     def random_point(self) -> np.ndarray:
         """Generate random point in RP² using hemisphere representation."""
-        # Generate point on unit sphere
         theta = np.random.uniform(0, 2 * np.pi)
         phi = np.arccos(np.random.uniform(-1, 1))
         point = np.array([
@@ -26,7 +25,6 @@ class ProjectiveManifold(BaseManifold):
             np.cos(phi)
         ])
         
-        # Project to upper hemisphere (z ≥ 0)
         if point[2] < 0:
             point = -point
             
@@ -34,14 +32,11 @@ class ProjectiveManifold(BaseManifold):
     
     def initial_frame(self, point: np.ndarray) -> np.ndarray:
         """Create orthonormal frame at point."""
-        # Normalize point to unit sphere
         p = point / np.linalg.norm(point)
         
-        # First basis vector in theta direction
         theta = np.arctan2(p[1], p[0])
         e1 = np.array([-np.sin(theta), np.cos(theta), 0])
         
-        # Second basis vector in phi direction
         e2 = np.cross(p, e1)
         
         return np.stack([e1, e2])
@@ -55,14 +50,12 @@ class ProjectiveManifold(BaseManifold):
         new_pos = self.project_to_manifold(point + displacement)
         new_p = new_pos / np.linalg.norm(new_pos)
         
-        # If crossed to lower hemisphere, flip coordinates
         if np.dot(old_p, new_p) < 0:
             new_p = -new_p
             new_pos = -new_pos
         
         new_frame = []
         for vec in frame:
-            # Parallel transport on sphere
             transported = vec - (np.dot(vec, new_p) * new_p)
             transported = transported / np.linalg.norm(transported)
             new_frame.append(transported)
@@ -98,7 +91,6 @@ class ProjectiveManifold(BaseManifold):
         old_p = old_pos / np.linalg.norm(old_pos)
         new_p = new_pos / np.linalg.norm(new_pos)
         
-        # Compute angle between points (considering antipodal identification)
         cos_angle = abs(np.dot(old_p, new_p))
         cos_angle = np.clip(cos_angle, -1.0, 1.0)
         angle = np.arccos(cos_angle)
@@ -109,7 +101,7 @@ class ProjectiveManifold(BaseManifold):
         """Return data for visualizing RP² as a hemisphere."""
         r = self.params['radius']
         u = np.linspace(0, 2*np.pi, 30)
-        v = np.linspace(0, np.pi/2, 15)  # Only upper hemisphere
+        v = np.linspace(0, np.pi/2, 15)  
         u, v = np.meshgrid(u, v)
         
         x = r * np.cos(u) * np.sin(v)

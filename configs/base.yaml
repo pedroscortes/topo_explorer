@@ -1,11 +1,10 @@
-# Base configuration for training
 
 environment:
   max_episode_steps: 1000
 
 agent:
-  state_dim: 7  # position (3) + curvature (1) + frame (2) + exploration (1)
-  action_dim: 3  # tangent vector in R³
+  state_dim: 7  
+  action_dim: 3  
   hidden_dim: 128
   num_layers: 3
 

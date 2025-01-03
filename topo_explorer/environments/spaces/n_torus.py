@@ -14,8 +14,8 @@ class NTorusManifold(BaseManifold):
     
     def _default_params(self) -> Dict:
         return {
-            'dimension': 2,  # Number of S¹ factors
-            'radii': [1.0, 1.0]  # Radius for each S¹
+            'dimension': 2,  
+            'radii': [1.0, 1.0]  
         }
     
     def __init__(self, params: Optional[Dict] = None):
@@ -60,7 +60,6 @@ class NTorusManifold(BaseManifold):
         frame = []
         
         for i in range(n):
-            # Tangent vector for i-th circle factor
             basis = np.zeros(2*n)
             basis[2*i] = -radii[i] * np.sin(angles[i])
             basis[2*i + 1] = radii[i] * np.cos(angles[i])
@@ -82,10 +81,8 @@ class NTorusManifold(BaseManifold):
         
         new_frame = []
         for vec in frame:
-            # Transport each component separately
             transported = np.zeros_like(vec)
             for i in range(n):
-                # Rotate the i-th circle component by the angle difference
                 cos_d = np.cos(angle_diffs[i])
                 sin_d = np.sin(angle_diffs[i])
                 transported[2*i] = cos_d * vec[2*i] - sin_d * vec[2*i + 1]
@@ -111,7 +108,6 @@ class NTorusManifold(BaseManifold):
                           vector: np.ndarray) -> np.ndarray:
         """Project vector onto tangent space."""
         frame = self.initial_frame(point)
-        # Project onto frame vectors
         coeffs = np.array([np.dot(vector, basis) for basis in frame])
         return sum(c * basis for c, basis in zip(coeffs, frame))
     
@@ -123,10 +119,8 @@ class NTorusManifold(BaseManifold):
                       old_pos: np.ndarray, 
                       new_pos: np.ndarray) -> float:
         """Compute reward encouraging exploration of all factors."""
-        # Base distance reward
         distance = np.linalg.norm(new_pos - old_pos)
         
-        # Reward for exploring each circle factor
         old_angles = self._embedding_to_angles(old_pos)
         new_angles = self._embedding_to_angles(new_pos)
         angle_progress = np.abs(new_angles - old_angles)

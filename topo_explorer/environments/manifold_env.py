@@ -4,10 +4,8 @@ Provides a framework for RL agents to explore different geometric spaces includi
 spheres, tori, and hyperbolic spaces.
 """
 
-# Standard library imports
 from typing import Dict, List, Optional, Tuple, Union
 
-# Third-party imports
 import numpy as np
 import gymnasium as gym
 from gymnasium import spaces
@@ -41,16 +39,14 @@ class ManifoldEnvironment(gym.Env):
         self.params = params or self._default_params()
         self.render_mode = render_mode
         
-        # Initialize state
         self.current_position = self._random_point()
         self.trajectory = [self.current_position]
         self.frame = self._initial_frame()
         
-        # Define action and observation spaces
         self.action_space = spaces.Box(
             low=-1.0,
             high=1.0,
-            shape=(3,),  # 3D movement
+            shape=(3,),  
             dtype=np.float32
         )
         
@@ -229,61 +225,46 @@ class ManifoldEnvironment(gym.Env):
         Returns:
             Tuple of (observation, reward, terminated, truncated, info)
         """
-        # Store current position for reward computation
         old_position = self.current_position.copy()
         
-        # Project action to tangent space and take step
         if self.manifold_type == 'sphere':
-            # Project action to tangent space
             normal = old_position / np.linalg.norm(old_position)
             action = action - np.dot(action, normal) * normal
             action = action / (np.linalg.norm(action) + 1e-8)
             
-            # Adaptive step size based on exploration history
             min_dist_to_history = float('inf')
             if len(self.trajectory) > 1:
                 dists = np.linalg.norm(
                     np.array(self.trajectory) - old_position, axis=1)
                 min_dist_to_history = np.min(dists)
             
-            # Larger steps when in well-explored areas
             step_size = 0.2 * self.params['radius'] * (1.0 + 0.5 * np.exp(-min_dist_to_history))
             
-            # Take step
             new_position = old_position + step_size * action
-            # Project back to sphere
             new_position = new_position * self.params['radius'] / np.linalg.norm(new_position)
             
         elif self.manifold_type == 'torus':
-            # Implementation for torus
             pass
             
         elif self.manifold_type == 'hyperbolic':
-            # Implementation for hyperbolic space
             pass
             
-        # Update state
         self.current_position = new_position
         self.trajectory.append(new_position)
         
-        # Update frame via parallel transport
         self.frame = self.parallel_transport(self.frame, new_position - old_position)
         
-        # Compute reward
         reward = self.compute_reward(old_position, new_position)
         
-        # Get observation
         observation = {
             'position': self.current_position,
             'frame': self.frame,
             'curvature': np.array([self.gaussian_curvature(self.current_position)])
         }
         
-        # Check if episode should end
-        terminated = len(self.trajectory) >= 500  # Maximum episode length
+        terminated = len(self.trajectory) >= 500  
         truncated = False
         
-        # Additional info for visualization and analysis
         info = {
             'step_size': step_size if 'step_size' in locals() else 0.0,
             'curvature': self.gaussian_curvature(self.current_position),
@@ -315,7 +296,6 @@ class ManifoldEnvironment(gym.Env):
             r = self.params['radius']
             eps = 1e-8
             
-            # 1. Movement reward (geodesic distance)
             norm_prod = np.linalg.norm(old_pos) * np.linalg.norm(new_pos)
             if norm_prod < eps:
                 movement_reward = 0.0
@@ -324,7 +304,6 @@ class ManifoldEnvironment(gym.Env):
                 geodesic_dist = r * np.arccos(cos_angle)
                 movement_reward = geodesic_dist
             
-            # 2. Exploration reward
             exploration_reward = 0.0
             coverage_reward = 0.0
             
@@ -341,7 +320,6 @@ class ManifoldEnvironment(gym.Env):
                     angle = self._safe_angle(prev_dir, curr_dir)
                     coverage_reward = np.sin(angle)
             
-            # 3. Smoothness penalty
             smoothness_penalty = 0.0
             if len(self.trajectory) > 2:
                 last_three = np.array(self.trajectory[-3:] + [new_pos])
@@ -352,10 +330,8 @@ class ManifoldEnvironment(gym.Env):
                     angles.append(angle)
                 smoothness_penalty = np.sum(angles) * 0.1
             
-            # 4. Progress penalty
             progress_penalty = 1.0 if movement_reward < 0.1 * r else 0.0
             
-            # 5. Area coverage reward
             area_reward = 0.0
             if len(self.trajectory) > 10:
                 recent_positions = np.array(self.trajectory[-10:] + [new_pos])
@@ -366,17 +342,15 @@ class ManifoldEnvironment(gym.Env):
                         pdist[i,j] = pdist[j,i] = angle
                 area_reward = np.mean(pdist) * r * 0.5
             
-            # Combine rewards with weights
             total_reward = (
-                movement_reward * 1.0 +       # Base movement
-                exploration_reward * 2.0 +    # Exploring new areas
-                coverage_reward * 1.0 +       # Angular coverage
-                area_reward * 1.0 -           # Area coverage
-                smoothness_penalty * 1.0 -    # Smoothness
-                progress_penalty * 0.5        # Progress
+                movement_reward * 1.0 +       
+                exploration_reward * 2.0 +    
+                coverage_reward * 1.0 +       
+                area_reward * 1.0 -           
+                smoothness_penalty * 1.0 -    
+                progress_penalty * 0.5        
             )
             
-            # Clip reward for stability
             total_reward = np.clip(total_reward, -10.0, 10.0)
             return float(total_reward)
             
@@ -421,7 +395,6 @@ class ManifoldEnvironment(gym.Env):
         """Get data needed for visualization."""
         if self.manifold_type == 'sphere':
             r = self.params['radius']
-            # Increase resolution of sphere wireframe
             u, v = np.mgrid[0:2*np.pi:40j, 0:np.pi:20j]
             x = r * np.cos(u) * np.sin(v)
             y = r * np.sin(u) * np.sin(v)
@@ -470,7 +443,6 @@ class ManifoldEnvironment(gym.Env):
         if self.manifold_type in ['sphere', 'torus']:
             ax = fig.add_subplot(121, projection='3d')
             
-            # Set frame scale based on manifold
             if self.manifold_type == 'sphere':
                 frame_scale = 0.5
                 u, v = np.mgrid[0:2*np.pi:20j, 0:np.pi:10j]
@@ -479,7 +451,7 @@ class ManifoldEnvironment(gym.Env):
                 y = r * np.sin(u) * np.sin(v)
                 z = r * np.cos(v)
                 ax.plot_wireframe(x, y, z, color='gray', alpha=0.2)
-            else:  # torus
+            else: 
                 frame_scale = 0.3
                 u, v = np.mgrid[0:2*np.pi:30j, 0:2*np.pi:20j]
                 R, r = self.params['R'], self.params['r']
@@ -488,7 +460,6 @@ class ManifoldEnvironment(gym.Env):
                 z = r * np.sin(v)
                 ax.plot_wireframe(x, y, z, color='gray', alpha=0.2)
             
-            # Plot trajectory and frame
             ax.plot(trajectory[:, 0], trajectory[:, 1], trajectory[:, 2], 'r-', 
                    label='Path', linewidth=2)
             ax.scatter(trajectory[-1, 0], trajectory[-1, 1], trajectory[-1, 2], 
@@ -503,7 +474,7 @@ class ManifoldEnvironment(gym.Env):
                      frame[1, 0], frame[1, 1], frame[1, 2],
                      color='green', length=frame_scale, label='e2')
             
-        else:  # Hyperbolic plane
+        else:  
             ax = fig.add_subplot(121)
             circle = plt.Circle((0, 0), 1, fill=False, color='gray')
             ax.add_artist(circle)
@@ -515,7 +486,7 @@ class ManifoldEnvironment(gym.Env):
             pos = self.current_position
             frame = self.frame
             r = np.linalg.norm(pos[:2])
-            frame_scale = 0.2 * (1 - r)  # Scale with distance from boundary
+            frame_scale = 0.2 * (1 - r)  
             
             ax.quiver(pos[0], pos[1], frame[0, 0], frame[0, 1],
                      color='blue', scale=1/frame_scale, label='e1')
@@ -528,7 +499,6 @@ class ManifoldEnvironment(gym.Env):
         ax.set_title(f'{self.manifold_type.capitalize()} Manifold')
         ax.legend()
         
-        # Plot curvature
         ax2 = fig.add_subplot(122)
         curvatures = [self.gaussian_curvature(pos) for pos in trajectory]
         ax2.plot(curvatures, linewidth=2)
@@ -540,7 +510,6 @@ class ManifoldEnvironment(gym.Env):
         plt.show()
 
 if __name__ == "__main__":
-    # Example usage
     env = ManifoldEnvironment(manifold_type='sphere', render_mode='human')
     obs = env.reset()
     env.render()

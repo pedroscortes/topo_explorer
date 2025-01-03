@@ -10,7 +10,6 @@ from .mobius import MobiusManifold
 from .projective import ProjectiveManifold
 from .n_torus import NTorusManifold
 
-# Registry of available manifolds
 MANIFOLD_REGISTRY: Dict[str, Type[BaseManifold]] = {
     'sphere': SphereManifold,
     'torus': TorusManifold,

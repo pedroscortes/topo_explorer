@@ -32,7 +32,6 @@ class SphereManifold(BaseManifold):
         theta = np.arctan2(point[1], point[0])
         phi = np.arccos(point[2] / r)
         
-        # Tangent vectors in theta and phi directions
         e1 = np.array([np.cos(theta) * np.cos(phi),
                       np.sin(theta) * np.cos(phi),
                       -np.sin(phi)])
@@ -52,9 +51,7 @@ class SphereManifold(BaseManifold):
         
         new_frame = []
         for vec in frame:
-            # Project to tangent space at new point
             transported = vec - np.dot(vec, normal) * normal
-            # Normalize
             transported = transported / np.linalg.norm(transported)
             new_frame.append(transported)
             
@@ -83,12 +80,10 @@ class SphereManifold(BaseManifold):
                       old_pos: np.ndarray, 
                       new_pos: np.ndarray) -> float:
         """Compute reward based on distance moved."""
-        # Base reward is distance moved (encourage exploration)
         distance_moved = np.linalg.norm(new_pos - old_pos)
         
-        # Angular distance (great circle distance)
         cos_angle = np.dot(old_pos, new_pos) / (self.params['radius'] ** 2)
-        cos_angle = np.clip(cos_angle, -1.0, 1.0)  # Numerical stability
+        cos_angle = np.clip(cos_angle, -1.0, 1.0) 
         angular_distance = np.arccos(cos_angle)
         
         return distance_moved + 0.5 * angular_distance

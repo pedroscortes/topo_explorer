@@ -15,14 +15,13 @@ class HyperbolicManifold(BaseManifold):
     
     def _default_params(self) -> Dict:
         return {
-            'k': -1.0,  # Gaussian curvature
-            'boundary_threshold': 0.99  # Maximum allowed distance from origin
+            'k': -1.0,   
+            'boundary_threshold': 0.99  
         }
     
     def random_point(self) -> np.ndarray:
         """Generate random point in Poincaré disk."""
-        # Use rejection sampling to get uniform distribution in hyperbolic metric
-        r = np.random.uniform(0, 0.9)  # Keep away from boundary
+        r = np.random.uniform(0, 0.9)  
         theta = np.random.uniform(0, 2 * np.pi)
         return np.array([
             r * np.cos(theta),
@@ -35,11 +34,9 @@ class HyperbolicManifold(BaseManifold):
         pos = point[:2]
         theta = np.arctan2(pos[1], pos[0])
         
-        # Create frame vectors
         e1 = np.array([np.cos(theta), np.sin(theta), 0])
         e2 = np.array([-np.sin(theta), np.cos(theta), 0])
         
-        # Scale by hyperbolic metric
         scale = 1 / (1 - np.sum(pos**2))
         return scale * np.stack([e1, e2])
     
@@ -70,7 +67,7 @@ class HyperbolicManifold(BaseManifold):
         r = np.linalg.norm(point[:2])
         if r >= self.params['boundary_threshold']:
             point[:2] = point[:2] / r * (self.params['boundary_threshold'])
-        point[2] = 0  # Ensure z-coordinate is zero
+        point[2] = 0  
         return point
     
     def project_to_tangent(self, 
@@ -78,13 +75,13 @@ class HyperbolicManifold(BaseManifold):
                           vector: np.ndarray) -> np.ndarray:
         """Project vector onto tangent space of hyperbolic plane."""
         vector = vector.copy()
-        vector[2] = 0  # Ensure vector stays in plane
+        vector[2] = 0  
         return vector
     
     def get_step_size(self, point: np.ndarray) -> float:
         """Return step size that decreases near boundary."""
         r = np.linalg.norm(point[:2])
-        return 0.1 * (1 - r)  # Step size goes to zero at boundary
+        return 0.1 * (1 - r)  
     
     def compute_reward(self, 
                       old_pos: np.ndarray, 
@@ -92,14 +89,11 @@ class HyperbolicManifold(BaseManifold):
         """
         Compute reward encouraging exploration while respecting boundary.
         """
-        # Base movement reward
         distance_moved = np.linalg.norm(new_pos - old_pos)
         
-        # Reward for approaching boundary (but not too close)
         r = np.linalg.norm(new_pos[:2])
-        boundary_reward = r / (1 - r)  # Increases as we approach boundary
+        boundary_reward = r / (1 - r)  
         
-        # Hyperbolic distance
         x1, y1 = old_pos[:2]
         x2, y2 = new_pos[:2]
         d = 2 * np.arccosh(1 + 2 * ((x2-x1)**2 + (y2-y1)**2) / 

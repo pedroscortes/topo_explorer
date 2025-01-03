@@ -15,14 +15,14 @@ class TorusManifold(BaseManifold):
     
     def _default_params(self) -> Dict:
         return {
-            'R': 3.0,  # Major radius
-            'r': 1.0   # Minor radius
+            'R': 3.0,  
+            'r': 1.0   
         }
     
     def random_point(self) -> np.ndarray:
         """Generate a random point on the torus using uniform parameters."""
-        u = np.random.uniform(0, 2 * np.pi)  # Major circle parameter
-        v = np.random.uniform(0, 2 * np.pi)  # Minor circle parameter
+        u = np.random.uniform(0, 2 * np.pi)  
+        v = np.random.uniform(0, 2 * np.pi)  
         R, r = self.params['R'], self.params['r']
         
         return np.array([
@@ -34,14 +34,11 @@ class TorusManifold(BaseManifold):
     def initial_frame(self, point: np.ndarray) -> np.ndarray:
         """Create orthonormal frame using the natural torus coordinates."""
         R, r = self.params['R'], self.params['r']
-        # Get angular coordinates
         u = np.arctan2(point[1], point[0])
         v = np.arctan2(point[2], np.sqrt(point[0]**2 + point[1]**2) - R)
         
-        # First basis vector (along major circle)
         e1 = np.array([-np.sin(u), np.cos(u), 0])
         
-        # Second basis vector (along minor circle)
         e2 = np.array([
             np.cos(u) * (-np.sin(v)),
             np.sin(u) * (-np.sin(v)),
@@ -62,7 +59,6 @@ class TorusManifold(BaseManifold):
         d = np.sqrt(new_pos[0]**2 + new_pos[1]**2)
         v = np.arctan2(new_pos[2], d - R)
         
-        # Normal vector at new position
         normal = np.array([
             np.cos(u) * np.cos(v),
             np.sin(u) * np.cos(v),
@@ -80,7 +76,6 @@ class TorusManifold(BaseManifold):
     def gaussian_curvature(self, point: np.ndarray) -> float:
         """Compute Gaussian curvature which varies with position."""
         R, r = self.params['R'], self.params['r']
-        # Get angular coordinates
         u = np.arctan2(point[1], point[0])
         v = np.arctan2(point[2], np.sqrt(point[0]**2 + point[1]**2) - R)
         return np.cos(v) / (r * (R + r * np.cos(v)))
@@ -88,12 +83,10 @@ class TorusManifold(BaseManifold):
     def project_to_manifold(self, point: np.ndarray) -> np.ndarray:
         """Project point onto torus surface."""
         R, r = self.params['R'], self.params['r']
-        # Convert to angular coordinates
         u = np.arctan2(point[1], point[0])
         d = np.sqrt(point[0]**2 + point[1]**2)
         v = np.arctan2(point[2], d - R)
         
-        # Reconstruct point on torus
         return np.array([
             (R + r * np.cos(v)) * np.cos(u),
             (R + r * np.cos(v)) * np.sin(u),
@@ -126,15 +119,12 @@ class TorusManifold(BaseManifold):
         """
         Compute reward encouraging exploration of both major and minor circles.
         """
-        # Base movement reward
         distance_moved = np.linalg.norm(new_pos - old_pos)
         
-        # Major circle exploration reward
         u_old = np.arctan2(old_pos[1], old_pos[0])
         u_new = np.arctan2(new_pos[1], new_pos[0])
         major_circle_progress = abs(u_new - u_old)
         
-        # Minor circle exploration reward
         R = self.params['R']
         v_old = np.arctan2(old_pos[2], np.sqrt(old_pos[0]**2 + old_pos[1]**2) - R)
         v_new = np.arctan2(new_pos[2], np.sqrt(new_pos[0]**2 + new_pos[1]**2) - R)

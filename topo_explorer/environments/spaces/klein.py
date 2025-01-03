@@ -15,15 +15,15 @@ class KleinBottleManifold(BaseManifold):
     
     def _default_params(self) -> Dict:
         return {
-            'R': 2.0,  # Major radius
-            'r': 0.5,  # Minor radius
-            'twist_rate': 2.0  # Rate of twist for the non-orientable part
+            'R': 2.0,  
+            'r': 0.5,   
+            'twist_rate': 2.0  
         }
     
     def random_point(self) -> np.ndarray:
         """Generate random point on Klein bottle."""
-        u = np.random.uniform(0, 2 * np.pi)  # Around figure-8
-        v = np.random.uniform(0, 2 * np.pi)  # Around tube
+        u = np.random.uniform(0, 2 * np.pi)  
+        v = np.random.uniform(0, 2 * np.pi)  
         
         return self._parametric_point(u, v)
     
@@ -31,7 +31,6 @@ class KleinBottleManifold(BaseManifold):
         """Convert from parameter space to R³ coordinates."""
         R, r = self.params['R'], self.params['r']
         
-        # Figure-8 immersion
         cosu, sinu = np.cos(u), np.sin(u)
         cosv, sinv = np.cos(v), np.sin(v)
         
@@ -45,10 +44,8 @@ class KleinBottleManifold(BaseManifold):
         """Convert from R³ coordinates to parameter space."""
         x, y, z = point
         
-        # Get u parameter (angle in figure-8)
         u = 2 * np.arctan2(y, x)
         
-        # Get v parameter (angle around tube)
         R = self.params['R']
         proj_dist = np.sqrt(x*x + y*y) - R
         v = np.arctan2(z, proj_dist)
@@ -59,21 +56,18 @@ class KleinBottleManifold(BaseManifold):
         """Create orthonormal frame using local parameters."""
         u, v = self._get_local_parameters(point)
         
-        # Tangent vector in u direction (around figure-8)
         du = np.array([
             -np.sin(u/2),
             np.cos(u/2),
             0
         ])
         
-        # Tangent vector in v direction (around tube, with twist)
         dv = np.array([
             -np.sin(v) * np.cos(u/2),
             -np.sin(v) * np.sin(u/2),
             np.cos(v)
         ])
         
-        # Normalize frame vectors
         du = du / np.linalg.norm(du)
         dv = dv / np.linalg.norm(dv)
         
@@ -88,15 +82,12 @@ class KleinBottleManifold(BaseManifold):
         new_pos = self.project_to_manifold(point + displacement)
         new_u, new_v = self._get_local_parameters(new_pos)
         
-        # Check if we crossed the non-orientable identification
         crossed_identification = abs(new_u - old_u) > np.pi
         
         new_frame = []
         for vec in frame:
-            # Basic parallel transport
             transported = vec.copy()
             
-            # If we crossed the identification, apply reflection
             if crossed_identification:
                 transported = -transported
                 
@@ -110,29 +101,23 @@ class KleinBottleManifold(BaseManifold):
         u, v = self._get_local_parameters(point)
         R, r = self.params['R'], self.params['r']
         
-        # Curvature varies with position in figure-8
         cos_u = np.cos(u)
         return -cos_u / (r * (R + r * cos_u))
     
     def project_to_manifold(self, point: np.ndarray) -> np.ndarray:
         """Project point onto Klein bottle surface."""
-        # Get closest parameters
         u, v = self._get_local_parameters(point)
         
-        # Reconstruct point on surface
         return self._parametric_point(u, v)
     
     def project_to_tangent(self, 
                           point: np.ndarray, 
                           vector: np.ndarray) -> np.ndarray:
         """Project vector onto tangent space."""
-        # Get local frame
         frame = self.initial_frame(point)
         
-        # Project vector onto frame
         coeffs = np.array([np.dot(vector, basis) for basis in frame])
         
-        # Reconstruct in tangent space
         return coeffs[0] * frame[0] + coeffs[1] * frame[1]
     
     def get_step_size(self, point: np.ndarray) -> float:
@@ -145,20 +130,15 @@ class KleinBottleManifold(BaseManifold):
         """
         Compute reward encouraging exploration of the non-orientable structure.
         """
-        # Basic distance reward
         distance = np.linalg.norm(new_pos - old_pos)
         
-        # Get parameters
         old_u, old_v = self._get_local_parameters(old_pos)
         new_u, new_v = self._get_local_parameters(new_pos)
         
-        # Reward for exploring figure-8 structure
         u_progress = abs(new_u - old_u)
         
-        # Reward for exploring tube structure
         v_progress = abs(new_v - old_v)
         
-        # Extra reward for crossing non-orientable identification
         identification_reward = 1.0 if abs(new_u - old_u) > np.pi else 0.0
         
         return distance + 0.3 * u_progress + 0.2 * v_progress + 0.5 * identification_reward

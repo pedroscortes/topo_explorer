@@ -21,35 +21,29 @@ class TrainingVisualizer:
             
     def plot_metrics(self, figsize: tuple = (15, 10)):
         """Plot all tracked metrics."""
-        # Only create plot if we have metrics
         if not self.metrics:
             return
             
-        # Get number of metrics that have data
         metrics_with_data = [(k, v) for k, v in self.metrics.items() if len(v) > 0]
         if not metrics_with_data:
             return
             
         n_metrics = len(metrics_with_data)
-        rows = max((n_metrics + 1) // 2, 1)  # At least 1 row
+        rows = max((n_metrics + 1) // 2, 1)  
         
-        # Create new figure
         plt.close('all')
         self.fig, self.axes = plt.subplots(rows, 2, figsize=figsize, squeeze=False)
         self.axes = self.axes.flatten()
         
-        # Plot each metric
         for i, (key, values) in enumerate(metrics_with_data):
             ax = self.axes[i]
             
-            # Plot raw values
             steps = np.arange(len(values))
             ax.plot(steps, values, alpha=0.3, label='Raw')
             
-            # Plot smoothed values if we have enough data
             if len(values) > 10:
                 window = min(len(values) // 10 + 1, 20)
-                window = max(window, 2)  # Ensure window size is at least 2
+                window = max(window, 2)  
                 smoothed = np.convolve(values, 
                                      np.ones(window)/window,
                                      mode='valid')
@@ -63,7 +57,6 @@ class TrainingVisualizer:
             ax.grid(True, alpha=0.3)
             ax.legend()
         
-        # Hide unused subplots
         for i in range(len(metrics_with_data), len(self.axes)):
             self.axes[i].set_visible(False)
             
@@ -78,7 +71,6 @@ class TrainingVisualizer:
         self.fig, axes = plt.subplots(2, 2, figsize=figsize)
         axes = axes.flatten()
         
-        # Learning curve
         if 'reward' in self.metrics and len(self.metrics['reward']) > 0:
             ax = axes[0]
             values = self.metrics['reward']
@@ -100,7 +92,6 @@ class TrainingVisualizer:
             ax.grid(True, alpha=0.3)
             ax.legend()
         
-        # Loss curves
         if 'policy_loss' in self.metrics and len(self.metrics['policy_loss']) > 0:
             ax = axes[1]
             steps = np.arange(len(self.metrics['policy_loss']))
@@ -117,7 +108,6 @@ class TrainingVisualizer:
             ax.grid(True, alpha=0.3)
             ax.legend()
         
-        # Exploration metric
         if 'exploration_score' in self.metrics and len(self.metrics['exploration_score']) > 0:
             ax = axes[2]
             values = self.metrics['exploration_score']
@@ -133,4 +123,4 @@ class TrainingVisualizer:
         """Display current plots."""
         if self.fig:
             plt.draw()
-            plt.pause(0.1)  # Small pause to ensure display
+            plt.pause(0.1)  

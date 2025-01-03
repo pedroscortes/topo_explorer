@@ -68,18 +68,15 @@ def parallel_transport_matrix(v1: np.ndarray,
     Returns:
         3x3 parallel transport matrix
     """
-    # Ensure unit vectors
     v1 = normalize_vector(v1)
     v2 = normalize_vector(v2)
     
-    # Compute rotation axis and angle
     cos_theta = np.clip(np.dot(v1, v2), -1.0, 1.0)
     
-    if abs(cos_theta - 1.0) < eps:  # vectors are parallel
+    if abs(cos_theta - 1.0) < eps:  
         return np.eye(3)
         
-    if abs(cos_theta + 1.0) < eps:  # vectors are antiparallel
-        # Choose any perpendicular axis
+    if abs(cos_theta + 1.0) < eps:    
         axis = np.array([1.0, 0.0, 0.0]) if abs(v1[0]) < 0.9 else np.array([0.0, 1.0, 0.0])
         axis = normalize_vector(axis - np.dot(axis, v1) * v1)
     else:
@@ -87,7 +84,6 @@ def parallel_transport_matrix(v1: np.ndarray,
     
     theta = np.arccos(cos_theta)
     
-    # Rodrigues rotation formula
     K = np.array([[0, -axis[2], axis[1]],
                   [axis[2], 0, -axis[0]],
                   [-axis[1], axis[0], 0]])
@@ -110,12 +106,10 @@ def christoffel_symbols(metric_tensor: Callable[[np.ndarray], np.ndarray],
     d = len(point)
     gamma = np.zeros((d, d, d))
     
-    # Compute metric and its derivatives
     g = metric_tensor(point)
     g_inv = np.linalg.inv(g)
     dg = np.zeros((d, d, d))
     
-    # Compute metric derivatives using finite differences
     for k in range(d):
         point_plus = point.copy()
         point_minus = point.copy()
@@ -123,7 +117,6 @@ def christoffel_symbols(metric_tensor: Callable[[np.ndarray], np.ndarray],
         point_minus[k] -= h
         dg[:,:,k] = (metric_tensor(point_plus) - metric_tensor(point_minus)) / (2*h)
     
-    # Compute Christoffel symbols
     for i in range(d):
         for j in range(d):
             for k in range(d):
@@ -149,13 +142,11 @@ def geodesic_equation(metric_tensor: Callable[[np.ndarray], np.ndarray],
         Time derivative of state [velocity, acceleration]
     """
     d = len(state) // 2
-    x = state[:d]  # position
-    v = state[d:]  # velocity
+    x = state[:d]  
+    v = state[d:]  
     
-    # Compute Christoffel symbols
     gamma = christoffel_symbols(metric_tensor, x)
     
-    # Compute acceleration using geodesic equation
     a = np.zeros(d)
     for i in range(d):
         for j in range(d):
@@ -182,10 +173,8 @@ def compute_geodesic(start_point: np.ndarray,
     Returns:
         Tuple of (times, points) along geodesic
     """
-    # Initial state
     initial_state = np.concatenate([start_point, start_velocity])
     
-    # Solve geodesic equation
     solution = solve_ivp(
         lambda t, y: geodesic_equation(metric_tensor, t, y),
         t_span,
@@ -193,7 +182,6 @@ def compute_geodesic(start_point: np.ndarray,
         t_evaluation=np.linspace(t_span[0], t_span[1], n_points)
     )
     
-    # Extract positions
     d = len(start_point)
     points = solution.y[:d].T
     
@@ -216,11 +204,9 @@ def riemann_curvature_tensor(metric_tensor: Callable[[np.ndarray], np.ndarray],
     d = len(point)
     R = np.zeros((d, d, d, d))
     
-    # Get Christoffel symbols and their derivatives
     gamma = christoffel_symbols(metric_tensor, point)
     dgamma = np.zeros((d, d, d, d))
     
-    # Compute Christoffel symbol derivatives using finite differences
     for l in range(d):
         point_plus = point.copy()
         point_minus = point.copy()
@@ -230,7 +216,6 @@ def riemann_curvature_tensor(metric_tensor: Callable[[np.ndarray], np.ndarray],
         gamma_minus = christoffel_symbols(metric_tensor, point_minus)
         dgamma[:,:,:,l] = (gamma_plus - gamma_minus) / (2*h)
     
-    # Compute Riemann tensor components
     for i in range(d):
         for j in range(d):
             for k in range(d):
@@ -259,11 +244,9 @@ def sectional_curvature(metric_tensor: Callable[[np.ndarray], np.ndarray],
     Returns:
         Sectional curvature value
     """
-    # Get metric and Riemann tensor
     g = metric_tensor(point)
     R = riemann_curvature_tensor(metric_tensor, point)
     
-    # Compute numerator (Riemann tensor contraction)
     numerator = 0
     for i in range(len(point)):
         for j in range(len(point)):
@@ -271,7 +254,6 @@ def sectional_curvature(metric_tensor: Callable[[np.ndarray], np.ndarray],
                 for l in range(len(point)):
                     numerator += R[i,j,k,l] * v1[i] * v2[j] * v1[k] * v2[l]
     
-    # Compute denominator (area squared)
     g11 = sum(g[i,j] * v1[i] * v1[j] for i in range(len(point)) 
               for j in range(len(point)))
     g12 = sum(g[i,j] * v1[i] * v2[j] for i in range(len(point)) 
@@ -326,13 +308,10 @@ def parallel_transport_along_curve(vector: np.ndarray,
     result = [vector]
     
     for i in range(len(curve)-1):
-        # Get tangent vector to curve
         tangent = curve[i+1] - curve[i]
         
-        # Get Christoffel symbols at current point
         gamma = christoffel_symbols(metric_tensor, curve[i])
         
-        # Transport vector using parallel transport equation
         transported = result[-1].copy()
         for j in range(len(vector)):
             for k in range(len(vector)):

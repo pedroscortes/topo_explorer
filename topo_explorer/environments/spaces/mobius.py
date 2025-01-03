@@ -15,14 +15,14 @@ class MobiusManifold(BaseManifold):
     
     def _default_params(self) -> Dict:
         return {
-            'R': 2.0,    # Major radius
-            'width': 1.0  # Width of strip
+            'R': 2.0,    
+            'width': 1.0 
         }
     
     def random_point(self) -> np.ndarray:
         """Generate random point on Möbius strip."""
-        u = np.random.uniform(0, 2 * np.pi)  # Position around strip
-        v = np.random.uniform(-1, 1)         # Position across width
+        u = np.random.uniform(0, 2 * np.pi)  
+        v = np.random.uniform(-1, 1)         
         
         return self._parametric_point(u, v)
     
@@ -31,7 +31,6 @@ class MobiusManifold(BaseManifold):
         R = self.params['R']
         w = self.params['width']
         
-        # Standard parameterization of Möbius strip
         x = (R + w * v * np.cos(u/2)) * np.cos(u)
         y = (R + w * v * np.cos(u/2)) * np.sin(u)
         z = w * v * np.sin(u/2)
@@ -44,12 +43,10 @@ class MobiusManifold(BaseManifold):
         R = self.params['R']
         w = self.params['width']
         
-        # Get u parameter (angle around strip)
         u = np.arctan2(y, x)
         if u < 0:
             u += 2 * np.pi
             
-        # Get v parameter (position across width)
         r = np.sqrt(x*x + y*y)
         v = z / (w * np.sin(u/2)) if abs(np.sin(u/2)) > 1e-6 else \
             (r - R) / (w * np.cos(u/2))
@@ -62,21 +59,18 @@ class MobiusManifold(BaseManifold):
         R = self.params['R']
         w = self.params['width']
         
-        # Tangent vector in u direction (around strip)
         du = np.array([
             -R * np.sin(u) - w * v * (0.5 * np.sin(u/2) * np.cos(u) + np.cos(u/2) * np.sin(u)),
             R * np.cos(u) + w * v * (0.5 * np.sin(u/2) * np.sin(u) - np.cos(u/2) * np.cos(u)),
             0.5 * w * v * np.cos(u/2)
         ])
         
-        # Tangent vector in v direction (across width)
         dv = np.array([
             w * np.cos(u/2) * np.cos(u),
             w * np.cos(u/2) * np.sin(u),
             w * np.sin(u/2)
         ])
         
-        # Normalize frame vectors
         du = du / np.linalg.norm(du)
         dv = dv / np.linalg.norm(dv)
         
@@ -91,15 +85,12 @@ class MobiusManifold(BaseManifold):
         new_pos = self.project_to_manifold(point + displacement)
         new_u, new_v = self._get_local_parameters(new_pos)
         
-        # Check if we've gone around the strip
         crossed_identification = abs(new_u - old_u) > np.pi
         
         new_frame = []
         for vec in frame:
-            # Basic parallel transport
             transported = vec.copy()
             
-            # If we crossed the identification, apply reflection
             if crossed_identification:
                 transported = -transported
                 
@@ -114,14 +105,12 @@ class MobiusManifold(BaseManifold):
         R = self.params['R']
         w = self.params['width']
         
-        # Curvature formula for Möbius strip
         denom = R + w * v * np.cos(u/2)
         return -np.cos(u/2) / (denom * (1 + (w*v/(2*denom))**2)**2)
     
     def project_to_manifold(self, point: np.ndarray) -> np.ndarray:
         """Project point onto Möbius strip surface."""
         u, v = self._get_local_parameters(point)
-        # Clamp v to strip width
         v = np.clip(v, -1, 1)
         return self._parametric_point(u, v)
     
@@ -143,20 +132,15 @@ class MobiusManifold(BaseManifold):
         """
         Compute reward encouraging exploration of the non-orientable structure.
         """
-        # Basic distance reward
         distance = np.linalg.norm(new_pos - old_pos)
         
-        # Parameters
         old_u, old_v = self._get_local_parameters(old_pos)
         new_u, new_v = self._get_local_parameters(new_pos)
         
-        # Reward for exploring length of strip
         u_progress = abs(new_u - old_u)
         
-        # Reward for exploring width of strip
         v_progress = abs(new_v - old_v)
         
-        # Extra reward for crossing identification (completing a loop)
         identification_reward = 1.0 if abs(new_u - old_u) > np.pi else 0.0
         
         return distance + 0.3 * u_progress + 0.2 * v_progress + \
@@ -167,12 +151,10 @@ class MobiusManifold(BaseManifold):
         R = self.params['R']
         w = self.params['width']
         
-        # Create a grid in parameter space
         u = np.linspace(0, 2*np.pi, 100)
         v = np.linspace(-1, 1, 20)
         u, v = np.meshgrid(u, v)
         
-        # Convert to cartesian coordinates
         x = (R + w * v * np.cos(u/2)) * np.cos(u)
         y = (R + w * v * np.cos(u/2)) * np.sin(u)
         z = w * v * np.sin(u/2)
@@ -187,8 +169,8 @@ class MobiusManifold(BaseManifold):
                 'edge_colors': 'black'
             },
             'colormap_data': {
-                'values': v,  # Use v coordinate for coloring
-                'cmap': 'viridis',  # Color scheme
+                'values': v,  
+                'cmap': 'viridis',  
                 'label': 'Width Parameter'
             }
         }
@@ -208,23 +190,19 @@ class MobiusManifold(BaseManifold):
         Returns:
             Array of points along the geodesic
         """
-        # Get parameters for start and end points
         u1, v1 = self._get_local_parameters(start_point)
         u2, v2 = self._get_local_parameters(end_point)
         
-        # Handle the case where the geodesic crosses the identification
         if abs(u2 - u1) > np.pi:
             if u2 > u1:
                 u1 += 2*np.pi
             else:
                 u2 += 2*np.pi
         
-        # Linear interpolation in parameter space
         t = np.linspace(0, 1, num_points)
         u = u1 + t*(u2 - u1)
         v = v1 + t*(v2 - v1)
         
-        # Convert to cartesian coordinates
         points = np.array([self._parametric_point(ui, vi) 
                           for ui, vi in zip(u, v)])
         

@@ -40,14 +40,11 @@ def evaluate_agent(env: ManifoldEnvironment,
         
         done = False
         while not done:
-            # Get deterministic action
             action = agent.act(state, deterministic=True)
             
-            # Take step
             next_state, reward, terminated, truncated, _ = env.step(action)
             done = terminated or truncated
             
-            # Update metrics
             episode_reward += reward
             episode_curvatures.append(env.gaussian_curvature(state['position']))
             positions.append(state['position'])
@@ -57,12 +54,10 @@ def evaluate_agent(env: ManifoldEnvironment,
             
             state = next_state
         
-        # Compute episode metrics
         episode_rewards.append(episode_reward)
         episode_lengths.append(len(positions))
         curvatures.extend(episode_curvatures)
         
-        # Compute exploration metric (average pairwise distance)
         positions = np.array(positions)
         dists = np.linalg.norm(
             positions[:, None, :] - positions[None, :, :], axis=-1)
@@ -83,17 +78,14 @@ def evaluate_agent(env: ManifoldEnvironment,
 def main():
     args = parse_args()
     
-    # Load config
     config = load_config(args.config)
     
-    # Create environment
     env = ManifoldEnvironment(
         manifold_type=config['environment']['manifold_type'],
         params=config['environment']['params'],
         render_mode="human" if args.render else None
     )
     
-    # Create agent
     agent = GeometricAgent(
         state_dim=config['agent']['state_dim'],
         action_dim=config['agent']['action_dim'],
@@ -101,13 +93,10 @@ def main():
         num_layers=config['agent']['num_layers']
     )
     
-    # Load checkpoint
     agent.load(args.checkpoint)
     
-    # Run evaluation
     metrics = evaluate_agent(env, agent, args.num_episodes, args.render)
     
-    # Print results
     print("\nEvaluation Results:")
     print("-" * 50)
     for key, value in metrics.items():
