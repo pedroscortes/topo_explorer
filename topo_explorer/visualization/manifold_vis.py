@@ -1,10 +1,12 @@
 """Visualization module for manifold environments."""
 
+import torch
 import numpy as np
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 from typing import Dict, Optional, List, Tuple
 import matplotlib.animation as animation
+from scipy import stats
 
 class ManifoldVisualizer:
     """Visualizer for manifold geometry and agent trajectories."""
@@ -19,15 +21,26 @@ class ManifoldVisualizer:
         self.last_vis_data = None  
     
     def setup_plot(self):
-        """Setup matplotlib figure with subplots."""
-        plt.close('all')  
-        self.fig = plt.figure(figsize=self.figsize)
-        gs = self.fig.add_gridspec(1, 3)
-        self.ax_3d = self.fig.add_subplot(gs[0], projection='3d')
-        self.ax_curvature = self.fig.add_subplot(gs[1])
-        self.ax_metrics = self.fig.add_subplot(gs[2])
-        plt.tight_layout(pad=3.0)
-    
+        """Setup matplotlib figure with more informative plots."""
+        plt.close('all')
+        self.fig = plt.figure(figsize=(20, 12))
+        gs = self.fig.add_gridspec(2, 3, height_ratios=[1, 1], hspace=0.3, wspace=0.3)
+        
+        self.ax_3d = self.fig.add_subplot(gs[0, 0], projection='3d')
+        self.ax_learning = self.fig.add_subplot(gs[0, 1]) 
+        self.ax_exploration = self.fig.add_subplot(gs[0, 2])  
+        
+        self.ax_curvature = self.fig.add_subplot(gs[1, 0], projection='3d')
+        self.ax_geodesics = self.fig.add_subplot(gs[1, 1], projection='3d')
+        self.ax_value = self.fig.add_subplot(gs[1, 2])
+        
+        self.ax_3d.set_title("Current Trajectory")
+        self.ax_learning.set_title("Training Progress")
+        self.ax_exploration.set_title("Exploration Density")
+        self.ax_curvature.set_title("Curvature Distribution")
+        self.ax_geodesics.set_title("Recent Geodesics")
+        self.ax_value.set_title("Value Function")
+        
     def plot_manifold(self, vis_data: Dict):
         """Plot manifold surface."""
         self.last_vis_data = vis_data  
@@ -91,38 +104,84 @@ class ManifoldVisualizer:
             self.ax_curvature.set_xlabel('Step')
             self.ax_curvature.set_ylabel('Curvature')
             self.ax_curvature.grid(True, alpha=0.3)
-    
-    def plot_metrics(self, metrics: Dict[str, List[float]]):
-        """Plot training metrics."""
-        if not metrics or not any(len(v) > 0 for v in metrics.values()):
-            return
-            
-        self.ax_metrics.clear()
+
+    def _get_state_representation(self, point, env):
+        """Match the state dimension expected by the agent (11)"""
+        old_pos = env.current_position
+        env.current_position = point
+        frame = env._initial_frame()
+        env.current_position = old_pos
         
-        for name, values in metrics.items():
-            if not values:
+        return np.concatenate([
+            point,  
+            [env.gaussian_curvature(point)],  
+            frame.flatten(),  
+            [0.0]  
+        ])    
+
+    def plot_geodesics(self, points, num_steps=50):
+        """Plot geodesic paths between points"""
+        u = np.linspace(0, 1, num_steps)
+        paths = []
+        
+        for i in range(len(points)-1):
+            start, end = points[i], points[i+1]
+            start = start / np.linalg.norm(start)
+            end = end / np.linalg.norm(end)
+            
+            omega = np.arccos(np.clip(np.dot(start, end), -1.0, 1.0))
+            if omega < 1e-6:
                 continue
                 
-            steps = np.arange(len(values))
-            self.ax_metrics.plot(steps, values, label=name, alpha=0.8)
-            
-            if len(values) > 10:
-                window = min(len(values) // 5, 20)
-                window = max(window, 2)
-                smoothed = np.convolve(values, 
-                                     np.ones(window)/window,
-                                     mode='valid')
-                steps_smooth = np.arange(len(smoothed))
-                self.ax_metrics.plot(steps_smooth,
-                                   smoothed,
-                                   '--',
-                                   label=f'{name} (smoothed)',
-                                   alpha=0.5)
+            path = np.array([(np.sin((1-t)*omega)*start + np.sin(t*omega)*end)/np.sin(omega) 
+                        for t in u])
+            paths.append(path)
         
-        self.ax_metrics.set_title('Training Metrics')
-        self.ax_metrics.set_xlabel('Step')
-        self.ax_metrics.grid(True, alpha=0.3)
-        self.ax_metrics.legend()
+        return paths
+
+    def plot_curvature_heatmap(self, manifold, resolution=50):
+        theta = np.linspace(0, 2*np.pi, resolution)
+        phi = np.linspace(0, np.pi, resolution)
+        theta, phi = np.meshgrid(theta, phi)
+        
+        r = manifold.params['radius']
+        x = r * np.sin(phi) * np.cos(theta)
+        y = r * np.sin(phi) * np.sin(theta)
+        z = r * np.cos(phi)
+        
+        curvature = np.ones_like(theta) * (1.0 / (r * r))
+        return x, y, z, curvature
+
+    def plot_value_function(self, agent, env):
+        theta = np.linspace(0, 2*np.pi, 50)
+        phi = np.linspace(0, np.pi, 50)
+        values = np.zeros((len(theta), len(phi)))
+        
+        for i, th in enumerate(theta):
+            for j, ph in enumerate(phi):
+                point = env.params['radius'] * np.array([
+                    np.sin(ph) * np.cos(th),
+                    np.sin(ph) * np.sin(th),
+                    np.cos(ph)
+                ])
+                state = self._get_state_representation(point, env)
+                state_tensor = torch.FloatTensor(state).unsqueeze(0)
+                with torch.no_grad():
+                    _, value = agent.forward(state_tensor)
+                    values[i,j] = value.item()
+        
+        values = (values - values.min()) / (values.max() - values.min() + 1e-8)
+        return theta, phi, values     
+    
+    def plot_metrics(self, metrics):
+        """Plot learning curves on the middle plots."""
+        if 'value_loss' in metrics:
+            self.ax_curvature.clear()
+            self.ax_curvature.plot(metrics['value_loss'], label='Value Loss')
+            self.ax_curvature.set_yscale('log')
+            self.ax_curvature.set_xlabel('Steps')
+            self.ax_curvature.grid(True)
+            self.ax_curvature.legend()
 
     def plot_frame(self, position: np.ndarray, frame: np.ndarray, scale: float = 0.3):
         """Plot parallel transport frame at current position.
@@ -143,6 +202,96 @@ class ManifoldVisualizer:
                             color=colors[i],
                             linewidth=2,
                             label=labels[i])
+            
+    def plot_geometric_view(self, env, agent, trajectory):
+        """Plot geometric visualization without using PolyCollection."""
+        if not self.fig:
+            self.setup_plot()
+            
+        r = env.params['radius']
+        theta = np.linspace(0, 2*np.pi, 30)
+        phi = np.linspace(0, np.pi, 30)
+        THETA, PHI = np.meshgrid(theta, phi)
+        
+        X = r * np.sin(PHI) * np.cos(THETA)
+        Y = r * np.sin(PHI) * np.sin(THETA)
+        Z = r * np.cos(PHI)
+        
+        points = np.vstack([X.flatten(), Y.flatten(), Z.flatten()]).T
+        colors = plt.cm.viridis(np.ones(len(points))/2)  
+        self.ax_curvature.scatter(points[:, 0], points[:, 1], points[:, 2], 
+                                c=colors, alpha=0.1, s=1)
+        self.ax_curvature.set_title('Curvature Map')
+        
+        self.ax_geodesics.plot_wireframe(X, Y, Z, color='gray', alpha=0.1, rstride=2, cstride=2)
+        
+        recent_points = trajectory[-10:]
+        for i in range(len(recent_points)-1):
+            path = self.plot_geodesics([recent_points[i], recent_points[i+1]])[0]
+            self.ax_geodesics.plot(path[:,0], path[:,1], path[:,2], 'r-', linewidth=2)
+            self.ax_geodesics.scatter(recent_points[i][0], recent_points[i][1], 
+                                recent_points[i][2], color='blue', s=50)
+        
+        self.ax_curvature.view_init(elev=30, azim=45)
+        self.ax_geodesics.view_init(elev=30, azim=45)
+        
+        theta, phi, values = self.plot_value_function(agent, env)
+        im = self.ax_value.imshow(values.T, origin='lower', 
+                            extent=[0, 2*np.pi, 0, np.pi],
+                            aspect='auto', cmap='viridis')
+        plt.colorbar(im, ax=self.ax_value)
+        self.ax_value.set_xlabel('θ')
+        self.ax_value.set_ylabel('φ')
+
+        plt.tight_layout()
+
+    def plot_exploration_density(self, trajectory, ax=None):
+        """Plot density of explored regions using scatter plot instead of hexbin"""
+        if ax is None:
+            ax = self.ax_exploration
+
+        if ax is None:
+            return
+
+        ax.clear()
+        points = np.array(trajectory)
+        xy = np.arctan2(points[:,1], points[:,0])
+        z = np.arccos(np.clip(points[:,2] / np.linalg.norm(points, axis=1), -1.0, 1.0))
+        
+        density = stats.gaussian_kde([xy, z])(np.vstack([xy, z]))
+        idx = np.argsort(density)
+        
+        scatter = ax.scatter(xy[idx], z[idx], c=density[idx], 
+                            cmap='viridis', s=50, alpha=0.5)
+        plt.colorbar(scatter, ax=ax, label='Visit Density')
+        
+        ax.set_title('Exploration Density')
+        ax.set_xlabel('θ')
+        ax.set_ylabel('φ')
+        ax.set_xlim(-np.pi, np.pi)
+        ax.set_ylim(0, np.pi)   
+
+    def plot_learning_progress(self, metrics):
+        """Plot learning curves and statistics."""
+        self.ax_learning.clear()
+        
+        value_losses = metrics.get('value_loss', [])
+        if value_losses:
+            self.ax_learning.plot(value_losses, label='Value Loss', color='blue')
+            self.ax_learning.set_yscale('log')
+        
+        ax2 = self.ax_learning.twinx()
+        policy_losses = metrics.get('policy_loss', [])
+        if policy_losses:
+            ax2.plot(policy_losses, label='Policy Loss', color='red', linestyle='--')
+        
+        self.ax_learning.set_xlabel('Steps')
+        self.ax_learning.set_ylabel('Value Loss')
+        ax2.set_ylabel('Policy Loss')
+        
+        lines1, labels1 = self.ax_learning.get_legend_handles_labels()
+        lines2, labels2 = ax2.get_legend_handles_labels()
+        ax2.legend(lines1 + lines2, labels1 + labels2, loc='upper right')          
     
     def show(self):
         """Display the visualization."""

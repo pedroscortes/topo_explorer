@@ -8,6 +8,7 @@ from topo_explorer.environments import ManifoldEnvironment
 from topo_explorer.agents.geometric_agent import GeometricAgent
 from topo_explorer.agents.learners.geometric_learner import GeometricLearner
 from topo_explorer.visualization import ManifoldVisualizer, TrainingVisualizer
+import matplotlib.pyplot as plt
 
 def main():
     print("Initializing training environment...")
@@ -44,6 +45,7 @@ def main():
     total_steps = 0
     episode_rewards = []
     episode_lengths = []
+    episode_values = []    
     trajectory = []
     curvatures = []
     frames = []
@@ -62,7 +64,7 @@ def main():
         'value_loss': 0.0
     }
     
-    while total_steps < 10000:  
+    while total_steps < 10000:
         collect_metrics = learner.collect_experience(100)
         total_steps += 100
         
@@ -87,6 +89,9 @@ def main():
                 k: float(v) for k, v in collect_metrics.items() 
                 if k in current_metrics
             })
+            for k, v in collect_metrics.items():
+                if k in metrics:
+                    metrics[k].append(float(v))
         
         train_metrics = learner.train_step()
         if train_metrics:
@@ -94,6 +99,9 @@ def main():
                 k: float(v) for k, v in train_metrics.items() 
                 if k in current_metrics
             })
+            for k, v in train_metrics.items():
+                if k in metrics:
+                    metrics[k].append(float(v))
         
         if total_steps % 1000 == 0:
             print("\n\nDetailed Evaluation:")
@@ -101,9 +109,7 @@ def main():
             episode_rewards.append(eval_metrics['eval_reward'])
             episode_lengths.append(eval_metrics['eval_length'])
             
-            current_metrics['reward'] = eval_metrics['eval_reward']
-            
-            print(f"Step {total_steps}/{10000}")
+            print(f"Step {total_steps}/10000")
             print(f"Average Reward: {eval_metrics['eval_reward']:.2f}")
             print(f"Average Episode Length: {eval_metrics['eval_length']:.2f}")
             if 'policy_loss' in current_metrics:
@@ -111,45 +117,100 @@ def main():
             if 'value_loss' in current_metrics:
                 print(f"Value Loss: {current_metrics['value_loss']:.4f}")
             print("-" * 50)
-            
-            training_vis.update(current_metrics)
-            
-            manifold_vis.setup_plot()
-            manifold_vis.plot_manifold(env.get_visualization_data())
-            manifold_vis.plot_trajectory(np.array(trajectory), np.array(curvatures))
-            manifold_vis.plot_metrics(metrics)
-            manifold_vis.show()
-            
-            training_vis.plot_metrics()
-            training_vis.show()
     
     print("\nTraining completed!")
     print(f"Total time: {time.time() - start_time:.1f} seconds")
     print("=" * 50)
     
-    final_metrics = learner.evaluate(num_episodes=10)
-    print("\nFinal Results:")
-    print(f"Average Reward: {final_metrics.get('eval_reward', 0.0):.2f}")
-    print(f"Average Episode Length: {final_metrics.get('eval_length', 0.0):.2f}")
+    print("\nFinal Training Statistics:")
+    print(f"Value Loss Progress: {metrics['value_loss'][0]:.2f} → {metrics['value_loss'][-1]:.2f}")
+    print(f"Final Policy Loss: {metrics['policy_loss'][-1]:.4f}")
+    print(f"Reward Range: {min(episode_rewards):.2f} - {max(episode_rewards):.2f}")
+    print(f"Average Reward: {np.mean(episode_rewards):.2f} ± {np.std(episode_rewards):.2f}")
     
+    # Create summary plots
+    print("\nCreating training summary...")
+    plt.figure(figsize=(20, 10))
+    
+    # Training Progress
+    plt.subplot(231)
+    plt.plot(episode_rewards, 'b-', label='Reward')
+    plt.fill_between(range(len(episode_rewards)), 
+                    np.array(episode_rewards) - np.std(episode_rewards),
+                    np.array(episode_rewards) + np.std(episode_rewards),
+                    alpha=0.2)
+    plt.title('Training Progress')
+    plt.xlabel('Episode')
+    plt.ylabel('Reward')
+    plt.grid(True)
+    
+    # Value Loss
+    plt.subplot(232)
+    plt.plot(metrics['value_loss'], 'r-', label='Value Loss')
+    plt.yscale('log')
+    plt.title('Value Loss')
+    plt.xlabel('Step')
+    plt.ylabel('Loss')
+    plt.grid(True)
+    
+    # Policy Loss
+    plt.subplot(233)
+    plt.plot(metrics['policy_loss'], 'g-', label='Policy Loss')
+    plt.title('Policy Loss')
+    plt.xlabel('Step')
+    plt.ylabel('Loss')
+    plt.grid(True)
+    
+    # State Coverage
+    plt.subplot(234)
+    points = np.array(trajectory)
+    theta = np.arctan2(points[:,1], points[:,0])
+    phi = np.arccos(points[:,2] / np.linalg.norm(points, axis=1))
+    plt.hexbin(theta, phi, gridsize=30, cmap='viridis')
+    plt.colorbar(label='Density')
+    plt.title('State Space Coverage')
+    plt.xlabel('θ')
+    plt.ylabel('φ')
+    
+    # Episode Lengths
+    plt.subplot(235)
+    plt.plot(episode_lengths, 'c-', label='Length')
+    plt.title('Episode Lengths')
+    plt.xlabel('Episode')
+    plt.ylabel('Steps')
+    plt.grid(True)
+    
+    # Reward Distribution
+    plt.subplot(236)
+    plt.hist(episode_rewards, bins=20, color='purple', alpha=0.7)
+    plt.title('Reward Distribution')
+    plt.xlabel('Reward')
+    plt.ylabel('Count')
+    plt.grid(True)
+    
+    plt.tight_layout()
+    plt.savefig('training_summary.png', dpi=300, bbox_inches='tight')
+    plt.close()
+
+    print("Creating animation...")
     manifold_vis.setup_plot()
-    manifold_vis.plot_manifold(env.get_visualization_data())
-    manifold_vis.plot_trajectory(np.array(trajectory), np.array(curvatures))
-    manifold_vis.plot_frame(trajectory[-1], frames[-1])
-    manifold_vis.show()
+    manifold_vis.plot_manifold(env.get_visualization_data())  # This sets last_vis_data
     
-    training_vis.create_training_summary()
-    training_vis.show()
-    
-    print("\nSaving training animation...")
-    anim = manifold_vis.create_animation(
-        trajectory=trajectory,
-        frames=frames,
-        curvatures=curvatures,
-        interval=50
-    )
-    manifold_vis.save_animation(anim, "training_animation.gif")
-    print("Animation saved as 'training_animation.gif'")
+    # Create and save animation
+    print("Saving training animation...")
+    try:
+        anim = manifold_vis.create_animation(
+            trajectory=trajectory,
+            frames=frames,
+            curvatures=curvatures,
+            interval=50
+        )
+        manifold_vis.save_animation(anim, "training_animation.gif")
+        print("Animation saved successfully!")
+    except Exception as e:
+        print(f"Warning: Could not save animation due to error: {str(e)}")
+    finally:
+        plt.close('all')
 
 if __name__ == "__main__":
     main()
