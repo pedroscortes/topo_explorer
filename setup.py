@@ -10,6 +10,9 @@ setup(
         "matplotlib>=3.3.0",
         "gymnasium>=0.26.0",
         "pyyaml>=5.4.1",
+        "flask",
+        "flask-cors",
+        "websockets",
     ],
     extras_require={
         "dev": [

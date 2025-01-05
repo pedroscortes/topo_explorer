@@ -128,11 +128,9 @@ def main():
     print(f"Reward Range: {min(episode_rewards):.2f} - {max(episode_rewards):.2f}")
     print(f"Average Reward: {np.mean(episode_rewards):.2f} ± {np.std(episode_rewards):.2f}")
     
-    # Create summary plots
     print("\nCreating training summary...")
     plt.figure(figsize=(20, 10))
     
-    # Training Progress
     plt.subplot(231)
     plt.plot(episode_rewards, 'b-', label='Reward')
     plt.fill_between(range(len(episode_rewards)), 
@@ -144,7 +142,6 @@ def main():
     plt.ylabel('Reward')
     plt.grid(True)
     
-    # Value Loss
     plt.subplot(232)
     plt.plot(metrics['value_loss'], 'r-', label='Value Loss')
     plt.yscale('log')
@@ -153,7 +150,6 @@ def main():
     plt.ylabel('Loss')
     plt.grid(True)
     
-    # Policy Loss
     plt.subplot(233)
     plt.plot(metrics['policy_loss'], 'g-', label='Policy Loss')
     plt.title('Policy Loss')
@@ -161,7 +157,6 @@ def main():
     plt.ylabel('Loss')
     plt.grid(True)
     
-    # State Coverage
     plt.subplot(234)
     points = np.array(trajectory)
     theta = np.arctan2(points[:,1], points[:,0])
@@ -172,7 +167,6 @@ def main():
     plt.xlabel('θ')
     plt.ylabel('φ')
     
-    # Episode Lengths
     plt.subplot(235)
     plt.plot(episode_lengths, 'c-', label='Length')
     plt.title('Episode Lengths')
@@ -180,7 +174,6 @@ def main():
     plt.ylabel('Steps')
     plt.grid(True)
     
-    # Reward Distribution
     plt.subplot(236)
     plt.hist(episode_rewards, bins=20, color='purple', alpha=0.7)
     plt.title('Reward Distribution')
@@ -194,9 +187,8 @@ def main():
 
     print("Creating animation...")
     manifold_vis.setup_plot()
-    manifold_vis.plot_manifold(env.get_visualization_data())  # This sets last_vis_data
+    manifold_vis.plot_manifold(env.get_visualization_data())  
     
-    # Create and save animation
     print("Saving training animation...")
     try:
         anim = manifold_vis.create_animation(
