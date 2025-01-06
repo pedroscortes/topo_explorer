@@ -15,6 +15,21 @@ class BaseManifold(ABC):
             params: Dictionary of manifold-specific parameters
         """
         self.params = params or self._default_params()
+        self._visited_points = set()  
+        self._visit_threshold = 0.1
+        self.initial_point = self.random_point()
+
+    def _is_previously_visited(self, point: np.ndarray) -> bool:
+        """Check if a point has been previously visited within threshold."""
+        point = np.array(point)
+        for visited_point in self._visited_points:
+            if np.linalg.norm(point - visited_point) < self._visit_threshold:
+                return True
+        return False
+
+    def _mark_as_visited(self, point: np.ndarray):
+        """Mark a point as visited."""
+        self._visited_points.add(tuple(point)) 
     
     @abstractmethod
     def _default_params(self) -> Dict:

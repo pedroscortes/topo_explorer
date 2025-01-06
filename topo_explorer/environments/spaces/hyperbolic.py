@@ -12,6 +12,19 @@ class HyperbolicManifold(BaseManifold):
     using the Poincaré disk model where the disk |z| < 1 represents
     the entire hyperbolic plane.
     """
+
+    def __init__(self, params: Optional[Dict] = None):
+        super().__init__(params)
+
+    def should_terminate(self, point: np.ndarray, step_count: int, total_reward: float) -> bool:
+        """Determine if episode should end."""
+        distance_from_start = np.linalg.norm(point[:2] - self.initial_point[:2])
+        r = np.linalg.norm(point[:2])
+        near_boundary = r > self.params['boundary_threshold']
+        return (step_count >= 200 or
+                total_reward < -50.0 or
+                near_boundary or
+                (total_reward > 50.0 and distance_from_start > 0.5))    
     
     def _default_params(self) -> Dict:
         return {

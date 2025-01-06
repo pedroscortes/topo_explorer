@@ -1,86 +1,82 @@
-"""Test data generator for visualization."""
+"""Test data generator with RL agent integration."""
 import numpy as np
 import time
 import math
 import logging
+import torch
+from ..environments.manifold_env import ManifoldEnvironment
+
 logger = logging.getLogger(__name__)
 
 class TestDataGenerator:
     """Generates test data for visualization."""
+    
     def __init__(self):
         self.trajectory = []
         self.step = 0
         self.last_time = time.time()
         self.curvature_history = []
-        self.is_training = False  
-        
-    def start_training(self):
-        """Start the training process."""
-        logger.info("Starting training")
-        self.is_training = True
-        
-    def stop_training(self):
-        """Stop the training process."""
-        logger.info("Stopping training")
         self.is_training = False
         
+        self.current_manifold = 'sphere' 
+        self.env = ManifoldEnvironment(manifold_type=self.current_manifold)
+        state = self.env.reset()[0]
+        self.trajectory = [state['position']]
+        
     def generate_trajectory_point(self) -> dict:
-        """Generate a point on a sphere."""
+        """Generate a point on a manifold."""
         current_time = time.time()
         t = current_time - self.last_time
-        theta = t % (2 * math.pi)
-        phi = (t * 0.5) % math.pi
-        point = np.array([
-            math.sin(phi) * math.cos(theta),
-            math.sin(phi) * math.sin(theta),
-            math.cos(phi)
-        ])
+        
+        if self.is_training:
+            action = np.array([
+                np.cos(t),
+                np.sin(t),
+                0.5 * np.sin(2*t)
+            ])
+            state, _, _, _, _ = self.env.step(action)
+            point = state['position']
+        else:
+            theta = t % (2 * math.pi)
+            phi = (t * 0.5) % math.pi
+            point = np.array([
+                math.sin(phi) * math.cos(theta),
+                math.sin(phi) * math.sin(theta),
+                math.cos(phi)
+            ])
         
         if len(self.trajectory) > 50:
             self.trajectory = self.trajectory[-49:]
         self.trajectory.append(point)
-        logger.debug(f"Generated trajectory point {len(self.trajectory)}")
         
         return {
             'points': np.array(self.trajectory)
         }
         
-    def calculate_gaussian_curvature(self, point) -> float:
-        """Calculate Gaussian curvature at a point on a unit sphere.
-        For a sphere, the Gaussian curvature is constant: K = 1/R^2
-        where R is the radius (1 in our case)."""
-        return 1.0
-        
     def generate_metrics(self) -> dict:
         """Generate training metrics."""
         current_time = time.time()
         t = current_time - self.last_time
+        self.step += 1
         
-        if self.is_training:
-            self.step += 1
-            value_loss = math.sin(t) * 0.5 + 0.5
-            policy_loss = math.cos(t) * 0.3 + 0.5
-        else:
-            value_loss = 0
-            policy_loss = 0
+        state = self.env.get_state()
+        point = state['position']
+        curvature = self.env.manifold.gaussian_curvature(point)
+        
+        self.curvature_history.append({
+            'step': self.step,
+            'value': curvature
+        })
+        if len(self.curvature_history) > 50:
+            self.curvature_history = self.curvature_history[-50:]
             
-        if self.trajectory:
-            current_point = self.trajectory[-1]
-            curvature = self.calculate_gaussian_curvature(current_point)
-            self.curvature_history.append({
-                'step': self.step,
-                'value': curvature
-            })
-            if len(self.curvature_history) > 50:
-                self.curvature_history = self.curvature_history[-50:]
-                
         return {
             'type': 'metrics',
             'data': {
                 'training': {
                     'step': self.step,
-                    'value_loss': value_loss,
-                    'policy_loss': policy_loss,
+                    'value_loss': math.sin(t) * 0.5 + 0.5,
+                    'policy_loss': math.cos(t) * 0.3 + 0.5,
                     'coverage': len(self.trajectory) / 50.0
                 },
                 'curvature': self.curvature_history
@@ -88,13 +84,41 @@ class TestDataGenerator:
         }
         
     def generate_manifold_data(self) -> dict:
-        """Generate manifold geometric data."""
-        return {
-            'type': 'sphere',
-            'radius': 1.0,
-            'resolution': 32,
-            'properties': {
-                'color': 0x156289,
-                'opacity': 0.7,
+        """Generate manifold visualization data."""
+        try:
+            return self.env.get_visualization_data()
+        except Exception as e:
+            logger.error(f"Error generating manifold data: {e}")
+            return {
+                'type': 'sphere',  
+                'surface': None
             }
-        }
+    
+    def start_training(self):
+        """Start the training process."""
+        logger.info("Starting training")
+        self.is_training = True
+    
+    def stop_training(self):
+        """Stop the training process."""
+        logger.info("Stopping training")
+        self.is_training = False
+
+    def set_manifold_type(self, manifold_type: str):
+        """Change the current manifold type."""
+        try:
+            logger.info(f"Changing manifold type from {self.current_manifold} to {manifold_type}")
+            self.current_manifold = manifold_type
+            self.env = ManifoldEnvironment(manifold_type=manifold_type)
+            state = self.env.reset()[0]
+            self.trajectory = [state['position']]
+            self.curvature_history = []
+            self.step = 0
+            logger.info("Manifold change successful")
+        except Exception as e:
+            logger.error(f"Error changing manifold: {e}")
+            raise
+        
+    def reset_trajectory(self):
+        """Reset the trajectory for a new manifold."""
+        pass

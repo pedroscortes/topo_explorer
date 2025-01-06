@@ -11,6 +11,20 @@ class ProjectiveManifold(BaseManifold):
     This class represents RP² as a quotient of the sphere S² by the antipodal map.
     Points (x,y,z) and (-x,-y,-z) are identified as the same point in RP².
     """
+
+    def __init__(self, params: Optional[Dict] = None):
+        super().__init__(params)
+
+    def should_terminate(self, point: np.ndarray, step_count: int, total_reward: float) -> bool:
+        """Determine if episode should end."""
+        p1 = point / np.linalg.norm(point)
+        p2 = self.initial_point / np.linalg.norm(self.initial_point)
+        cos_angle = abs(np.dot(p1, p2))
+        angle = np.arccos(np.clip(cos_angle, -1.0, 1.0))
+        has_explored = angle > np.pi/4
+        return (step_count >= 200 or
+                total_reward < -50.0 or
+                (total_reward > 50.0 and has_explored))    
     
     def _default_params(self) -> Dict:
         return {'radius': 1.0}  

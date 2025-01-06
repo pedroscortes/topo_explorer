@@ -76,6 +76,10 @@ class SphereManifold(BaseManifold):
         """Return constant step size relative to radius."""
         return 0.1 * self.params['radius']
     
+    def reset_visited_points(self):
+        """Reset the set of visited points."""
+        self._visited_points = set()
+    
     def compute_reward(self, old_pos: np.ndarray, new_pos: np.ndarray) -> float:
         """Compute reward based on distance moved and curvature discovery."""
         distance_moved = np.linalg.norm(new_pos - old_pos)
@@ -83,6 +87,9 @@ class SphereManifold(BaseManifold):
         
         curvature = self.gaussian_curvature(new_pos)
         exploration_bonus = 1.0 if not self._is_previously_visited(new_pos) else 0.0
+        
+        self._mark_as_visited(new_pos)
+        
         geodesic_alignment = np.abs(np.dot(new_pos - old_pos, self.project_to_tangent(old_pos, new_pos - old_pos)))
         
         return (0.3 * distance_moved + 

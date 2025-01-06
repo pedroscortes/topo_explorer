@@ -11,6 +11,20 @@ class NTorusManifold(BaseManifold):
     This class represents the n-torus as a product of circles S¹ × ... × S¹.
     Each circle can have its own radius. The manifold is embedded in R^(2n).
     """
+
+    def __init__(self, params: Optional[Dict] = None):
+        super().__init__(params)
+
+    def should_terminate(self, point: np.ndarray, step_count: int, total_reward: float) -> bool:
+        """Determine if episode should end."""
+        n = self.params['dimension']
+        angles = self._embedding_to_angles(point)
+        initial_angles = self._embedding_to_angles(self.initial_point)
+        angle_diffs = np.abs(angles - initial_angles)
+        has_explored = np.mean(angle_diffs) > np.pi/2
+        return (step_count >= 200 or
+                total_reward < -50.0 or
+                (total_reward > 50.0 and has_explored))    
     
     def _default_params(self) -> Dict:
         return {

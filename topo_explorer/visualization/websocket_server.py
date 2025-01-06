@@ -58,6 +58,23 @@ class ManifoldVisWebSocket:
                 ))
                 self.logger.info("Training stopped")
         
+        elif action == 'change_manifold':
+            manifold_type = data.get('data', {}).get('manifold')
+            if manifold_type and self.generator:
+                self.logger.info(f"Changing manifold type to: {manifold_type}")
+                self.generator.set_manifold_type(manifold_type)
+                
+                manifold_data = self.generator.generate_manifold_data()
+                await self.broadcast(VisualizationData(
+                    type='manifold',
+                    data=manifold_data,
+                    timestamp=time.time()
+                ))
+                
+                self.generator.reset_trajectory()
+                
+                self.logger.info(f"Manifold changed to: {manifold_type}")
+        
     async def register(self, websocket):
         """Register a new client connection."""
         self.clients.add(websocket)
@@ -118,8 +135,10 @@ class ManifoldVisWebSocket:
                 return int(obj)
             elif isinstance(obj, (np.float64, np.float32)):
                 return float(obj)
+            elif isinstance(obj, tuple):  
+                return list(convert_numpy(i) for i in obj)
             return obj
-            
+                
         processed = asdict(data)
         processed['data'] = convert_numpy(processed['data'])
         return processed
@@ -152,6 +171,31 @@ class ManifoldVisWebSocket:
                         }))
                     elif data.get('type') == 'control':
                         await self.handle_control_message(data)
+
+                    elif data.get('type') == 'set_manifold':
+                        manifold_type = data.get('data', {}).get('type')
+                        if manifold_type:
+                            try:
+                                logger.info(f"WebSocket received manifold change request: {manifold_type}")
+                                self.generator.set_manifold_type(manifold_type)
+                                
+                                manifold_data = self.generator.generate_manifold_data()
+                                await self.broadcast(VisualizationData(
+                                    type='manifold',
+                                    data=manifold_data,
+                                    timestamp=time.time()
+                                ))
+                                
+                                traj_data = self.generator.generate_trajectory_point()
+                                await self.broadcast(VisualizationData(
+                                    type='trajectory',
+                                    data=traj_data,
+                                    timestamp=time.time()
+                                ))
+                                
+                                logger.info(f"Manifold change to {manifold_type} completed")
+                            except Exception as e:
+                                logger.error(f"Error during manifold change: {e}")    
                             
                 except json.JSONDecodeError:
                     self.logger.error("Invalid JSON received")
