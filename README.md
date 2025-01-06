@@ -2,7 +2,7 @@
 
 A framework for exploring and learning on geometric manifolds using reinforcement learning.
 
-<img src="[<iframe src="https://giphy.com/embed/PvYyvxkRsgsANGcPK3" width="480" height="470" style="" frameBorder="0" class="giphy-embed" allowFullScreen></iframe><p><a href="https://giphy.com/gifs/sphere-manifold-reinforcementlearning-PvYyvxkRsgsANGcPK3">via GIPHY</a></p>]"/>
+![Alt Text](https://media.giphy.com/media/PvYyvxkRsgsANGcPK3/giphy.gif)
 
 ## Installation
 
