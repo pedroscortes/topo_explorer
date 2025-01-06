@@ -2,6 +2,8 @@
 
 A framework for exploring and learning on geometric manifolds using reinforcement learning.
 
+![hippo](https://giphy.com/gifs/PvYyvxkRsgsANGcPK3)
+
 ## Installation
 
 Install in development mode:
