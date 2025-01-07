@@ -100,27 +100,26 @@ class ManifoldVisWebSocket:
         if not self.clients:
             return
             
-        processed_data = self._process_data(data)
-        
-        self._last_data[processed_data['type']] = processed_data['data']
-        
-        message = json.dumps(processed_data)
-        logger.debug(f"Broadcasting message type: {processed_data['type']}")
-        
-        disconnected = set()
-        for client in self.clients:
-            try:
-                await client.send(message)
-                logger.debug(f"Sent {processed_data['type']} data to client")
-            except websockets.exceptions.ConnectionClosed:
-                logger.info(f"Client disconnected during broadcast")
-                disconnected.add(client)
-            except Exception as e:
-                logger.error(f"Error broadcasting to client: {e}")
-                disconnected.add(client)
+        try:
+            processed_data = self._process_data(data)
+            message = json.dumps(processed_data)
+            logger.debug(f"Broadcasting {processed_data['type']} data: {processed_data['data']}")
+            
+            disconnected = set()
+            for client in self.clients:
+                try:
+                    await client.send(message)
+                except websockets.exceptions.ConnectionClosed:
+                    disconnected.add(client)
+                except Exception as e:
+                    logger.error(f"Error sending to client: {e}")
+                    disconnected.add(client)
+                    
+            for client in disconnected:
+                await self.unregister(client)
                 
-        for client in disconnected:
-            await self.unregister(client)
+        except Exception as e:
+            logger.error(f"Error in broadcast: {e}")
     
     def _process_data(self, data: VisualizationData) -> Dict:
         """Process data for JSON serialization."""
@@ -143,68 +142,58 @@ class ManifoldVisWebSocket:
         processed['data'] = convert_numpy(processed['data'])
         return processed
     
-    async def handler(self, websocket):
+    async def handler(self, websocket, *args):  # Change this line to accept variable arguments
         """Handle incoming WebSocket connections."""
         try:
-            await self.register(websocket)
-            async for message in websocket:
-                try:
-                    data = json.loads(message)
-                    self.logger.info(f"Received message: {data}")
-                    
-                    if data.get('type') == 'init':
-                        client_id = data.get('data', {}).get('clientId')
-                        self.logger.info(f"Client initialized: {client_id}")
-                        
-                        if self._last_data:
-                            await websocket.send(json.dumps({
-                                'type': 'full_state',
-                                'data': self._last_data
-                            }))
-                        
-                        await websocket.send(json.dumps({
-                            'type': 'ack',
-                            'data': {
-                                'status': 'connected',
-                                'clientId': client_id
-                            }
-                        }))
-                    elif data.get('type') == 'control':
-                        await self.handle_control_message(data)
+            # Add CORS headers
+            response_headers = {
+                'Access-Control-Allow-Origin': '*',
+                'Access-Control-Allow-Methods': 'GET, POST',
+                'Access-Control-Allow-Headers': 'Content-Type'
+            }
+            
+            if hasattr(websocket, 'request_headers') and websocket.request_headers.get('Origin'):
+                if hasattr(websocket, 'response_headers'):
+                    for header, value in response_headers.items():
+                        websocket.response_headers[header] = value
 
-                    elif data.get('type') == 'set_manifold':
-                        manifold_type = data.get('data', {}).get('type')
-                        if manifold_type:
-                            try:
-                                logger.info(f"WebSocket received manifold change request: {manifold_type}")
-                                self.generator.set_manifold_type(manifold_type)
-                                
-                                manifold_data = self.generator.generate_manifold_data()
-                                await self.broadcast(VisualizationData(
-                                    type='manifold',
-                                    data=manifold_data,
-                                    timestamp=time.time()
-                                ))
-                                
-                                traj_data = self.generator.generate_trajectory_point()
-                                await self.broadcast(VisualizationData(
-                                    type='trajectory',
-                                    data=traj_data,
-                                    timestamp=time.time()
-                                ))
-                                
-                                logger.info(f"Manifold change to {manifold_type} completed")
-                            except Exception as e:
-                                logger.error(f"Error during manifold change: {e}")    
+            await self.register(websocket)
+            try:
+                async for message in websocket:
+                    try:
+                        data = json.loads(message)
+                        self.logger.info(f"Received message: {data}")
+                        
+                        if data.get('type') == 'init':
+                            client_id = data.get('data', {}).get('clientId')
+                            self.logger.info(f"Client initialized: {client_id}")
                             
-                except json.JSONDecodeError:
-                    self.logger.error("Invalid JSON received")
-                except Exception as e:
-                    self.logger.error(f"Error handling message: {e}")
-        except websockets.exceptions.ConnectionClosed:
-            self.logger.info("Connection closed normally")
-        except Exception as e:
-            self.logger.error(f"Error in handler: {e}")
+                            if self._last_data:
+                                await websocket.send(json.dumps({
+                                    'type': 'full_state',
+                                    'data': self._last_data
+                                }))
+                            
+                            await websocket.send(json.dumps({
+                                'type': 'ack',
+                                'data': {
+                                    'status': 'connected',
+                                    'clientId': client_id
+                                }
+                            }))
+                        elif data.get('type') == 'set_manifold':
+                            await self.handle_manifold_change(data)
+                        elif data.get('type') == 'control':
+                            await self.handle_control_message(data)
+                            
+                    except json.JSONDecodeError:
+                        self.logger.error("Invalid JSON received")
+                    except Exception as e:
+                        self.logger.error(f"Error handling message: {e}", exc_info=True)
+            except websockets.exceptions.ConnectionClosed:
+                self.logger.info("Connection closed normally")
+            except Exception as e:
+                self.logger.error(f"Error in handler: {e}", exc_info=True)
         finally:
             await self.unregister(websocket)
     
@@ -233,9 +222,13 @@ async def run_test_server():
     """Run a test server that generates visualization data."""
     logger.info("Initializing test server...")
     generator = TestDataGenerator()
-    server = ManifoldVisWebSocket()
-    server.generator = generator
     
+    server = ManifoldVisWebSocket(
+        host='localhost',
+        port=8765
+    )
+    server.generator = generator
+
     async def send_test_data():
         """Send test data to connected clients."""
         logger.info("Starting test data generation...")
@@ -267,9 +260,13 @@ async def run_test_server():
                     logger.debug("Sent manifold update")
 
             except Exception as e:
-                logger.error(f"Error in send_test_data: {e}")
-                
-            await asyncio.sleep(0.1)  
+                logger.error(f"Error in send_test_data: {e}", exc_info=True)
+            
+            try:
+                await asyncio.sleep(0.1)
+            except asyncio.CancelledError:
+                logger.info("Data generation cancelled")
+                break
 
     server.running = True
     try:
@@ -279,8 +276,16 @@ async def run_test_server():
             send_test_data()
         )
     except Exception as e:
-        logger.error(f"Error in test server: {e}")
+        logger.error(f"Error in test server: {e}", exc_info=True)
+        server.running = False
         raise
+    finally:
+        if server.clients:
+            for client in server.clients.copy():
+                try:
+                    await client.close()
+                except Exception as e:
+                    logger.error(f"Error closing client connection: {e}")
 
 if __name__ == "__main__":
     logger.info("Starting WebSocket test server script...")

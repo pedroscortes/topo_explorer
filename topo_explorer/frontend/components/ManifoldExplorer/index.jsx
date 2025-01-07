@@ -126,6 +126,10 @@ const ManifoldExplorer = () => {
     );
   };
 
+  const handlePlayToggle = () => {
+    setIsPlaying(prev => !prev);
+  };
+
   const handleVisualizationUpdate = useCallback((message) => {
     if (!message.type || !message.data) {
       console.warn('Invalid message format:', message);
@@ -201,70 +205,89 @@ const ManifoldExplorer = () => {
     }
   
     try {
-      console.log('Connecting to WebSocket...');
+      console.log('Attempting WebSocket connection...');
       const ws = new WebSocket(WS_URL);
-      wsRef.current = ws;
+      let connectionTimeout = setTimeout(() => {
+        console.log('Connection timeout, retrying...');
+        ws.close();
+      }, 5000); 
   
       ws.onopen = () => {
+        clearTimeout(connectionTimeout);
         console.log('WebSocket Connected');
         setConnectionStatus('connected');
         setError(null);
+        wsRef.current = ws;
   
-        // Send initialization message
-        const initMessage = {
-          type: 'init',
-          data: { 
-            clientId: Math.random().toString(36).substr(2, 9),
-            manifold: selectedManifold
-          }
-        };
         try {
+          const initMessage = {
+            type: 'init',
+            data: { 
+              clientId: Math.random().toString(36).substr(2, 9),
+              manifold: selectedManifold
+            }
+          };
           ws.send(JSON.stringify(initMessage));
-          console.log('Sent init message');
+          console.log('Sent init message:', initMessage);
         } catch (err) {
           console.error('Failed to send init message:', err);
         }
       };
   
       ws.onclose = (event) => {
+        clearTimeout(connectionTimeout);
         console.log('WebSocket closed:', event.code, event.reason);
         setConnectionStatus('disconnected');
         wsRef.current = null;
   
         if (event.code !== WS_CLOSE_NORMAL) {
-          console.log('Attempting to reconnect...');
+          console.log('Attempting to reconnect in 5 seconds...');
           setTimeout(connectWebSocket, WS_RETRY_DELAY);
         }
       };
   
       ws.onerror = (error) => {
         console.error('WebSocket error:', error);
-        if (wsRef.current) {
-          wsRef.current.close();
+        setError('Connection error. Retrying...');
+        clearTimeout(connectionTimeout);
+        
+        if (ws.readyState !== WebSocket.CLOSED) {
+          ws.close();
         }
-        setError('Connection lost. Retrying...');
       };
   
       ws.onmessage = (event) => {
         try {
           const message = JSON.parse(event.data);
+          console.log('Received message:', message);
           handleVisualizationUpdate(message);
         } catch (error) {
           console.error('Error processing message:', error);
         }
       };
   
-      return () => {
-        if (ws.readyState === WebSocket.OPEN) {
-          ws.close(WS_CLOSE_NORMAL);
-        }
-      };
     } catch (error) {
       console.error('Failed to create WebSocket:', error);
-      setError('Failed to connect. Retrying...');
+      setError('Connection failed. Retrying...');
       setTimeout(connectWebSocket, WS_RETRY_DELAY);
     }
+  
+    return () => {
+      if (wsRef.current?.readyState === WebSocket.OPEN) {
+        wsRef.current.close(WS_CLOSE_NORMAL);
+      }
+    };
   }, [handleVisualizationUpdate, selectedManifold]);
+
+  useEffect(() => {
+    connectWebSocket();
+    
+    return () => {
+      if (wsRef.current?.readyState === WebSocket.OPEN) {
+        wsRef.current.close(WS_CLOSE_NORMAL);
+      }
+    };
+  }, [connectWebSocket]);
 
   useEffect(() => {
     console.log('Component mounted, establishing WebSocket connection');
@@ -370,7 +393,7 @@ const ManifoldExplorer = () => {
               Training
             </Button>
             <Button 
-              onClick={() => setIsPlaying(!isPlaying)}
+              onClick={handlePlayToggle}
               variant={isPlaying ? 'default' : 'outline'}
             >
               {isPlaying ? 'Pause' : 'Play'}
