@@ -3,338 +3,312 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls';
 
 const GeometryView = ({ manifoldData, trajectory, isPlaying }) => {
-  const canvasRef = useRef(null);
-  const rendererRef = useRef(null);
+  const containerRef = useRef(null);
   const sceneRef = useRef(null);
+  const rendererRef = useRef(null);
   const cameraRef = useRef(null);
   const controlsRef = useRef(null);
-  const animationFrameRef = useRef(null);
-  const isActiveRef = useRef(true);
   const [error, setError] = useState(null);
 
-  // Initial setup
+  // Scene setup
   useEffect(() => {
-    const init = async () => {
-      if (!canvasRef.current) return;
-
-      try {
-        // Scene setup
-        sceneRef.current = new THREE.Scene();
-        sceneRef.current.background = new THREE.Color(0xf5f5f5);
-
-        // Camera setup
-        const aspect = canvasRef.current.clientWidth / canvasRef.current.clientHeight;
-        cameraRef.current = new THREE.PerspectiveCamera(75, aspect, 0.1, 1000);
-        cameraRef.current.position.set(5, 5, 5);
-        cameraRef.current.lookAt(0, 0, 0);
-
-        // Renderer setup
-        rendererRef.current = new THREE.WebGLRenderer({
-          canvas: canvasRef.current,
-          antialias: true,
-          alpha: true,
-          preserveDrawingBuffer: true, // Add this
-          logarithmicDepthBuffer: true // Add this
-        });
-        rendererRef.current.setSize(canvasRef.current.clientWidth, canvasRef.current.clientHeight);
-        rendererRef.current.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-
-        // Controls setup
-        if (cameraRef.current && rendererRef.current) {
-          controlsRef.current = new OrbitControls(cameraRef.current, rendererRef.current.domElement);
-          
-          // Control settings
-          controlsRef.current.enableDamping = false;
-          controlsRef.current.autoRotate = false;
-          controlsRef.current.rotateSpeed = 1.0;
-          controlsRef.current.zoomSpeed = 1.0;
-          controlsRef.current.panSpeed = 1.0;
-          controlsRef.current.enableZoom = true;
-          controlsRef.current.enablePan = true;
-          controlsRef.current.enableRotate = true;
-          controlsRef.current.minDistance = 3;
-          controlsRef.current.maxDistance = 20;
-        }
-
-        // Lights
-        const ambientLight = new THREE.AmbientLight(0xffffff, 0.5); 
-        const directionalLight = new THREE.DirectionalLight(0xffffff, 1.0); 
-        directionalLight.position.set(5, 5, 5);
-        const directionalLight2 = new THREE.DirectionalLight(0xffffff, 0.5); 
-        directionalLight2.position.set(-5, -5, -5);
-        sceneRef.current.add(ambientLight);
-        sceneRef.current.add(directionalLight);
-        sceneRef.current.add(directionalLight2);
-
-        // Animation function
-        const animate = () => {
-          if (!isActiveRef.current) return;
-          
-          animationFrameRef.current = requestAnimationFrame(animate);
-          
-          if (controlsRef.current) {
-            controlsRef.current.update();
-          }
-          
-          if (rendererRef.current && sceneRef.current && cameraRef.current) {
-            rendererRef.current.render(sceneRef.current, cameraRef.current);
-          }
-        };
-
-        // Start animation
-        animate();
-      } catch (error) {
-        console.error('Failed to initialize 3D viewer:', error);
-        setError('Failed to initialize 3D viewer');
-      }
-    };
-
-    init();
-
-    // Cleanup function
-    return () => {
-      isActiveRef.current = false;
-      
-      if (animationFrameRef.current) {
-        cancelAnimationFrame(animationFrameRef.current);
-      }
-      
-      if (controlsRef.current) {
-        controlsRef.current.dispose();
-      }
-      
-      if (rendererRef.current) {
-        rendererRef.current.dispose();
-      }
-      
-      if (sceneRef.current) {
-        sceneRef.current.traverse((object) => {
-          if (object.geometry) {
-            object.geometry.dispose();
-          }
-          if (object.material) {
-            if (Array.isArray(object.material)) {
-              object.material.forEach(material => material.dispose());
-            } else {
-              object.material.dispose();
-            }
-          }
-        });
-      }
-    };
-  }, []);
-
-  // Handle play state
-  useEffect(() => {
-    if (!controlsRef.current) return;
-    controlsRef.current.autoRotate = isPlaying;
-    controlsRef.current.autoRotateSpeed = 2.0;
-  }, [isPlaying]);
-
-  // Handle window resize
-  useEffect(() => {
-    const handleResize = () => {
-      if (!canvasRef.current || !cameraRef.current || !rendererRef.current) return;
-      
-      const width = canvasRef.current.clientWidth;
-      const height = canvasRef.current.clientHeight;
-      
-      cameraRef.current.aspect = width / height;
-      cameraRef.current.updateProjectionMatrix();
-      rendererRef.current.setSize(width, height, false);
-    };
-
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, []);
-
-  // Handle manifold updates
-  useEffect(() => {
-    if (!sceneRef.current || !manifoldData) {
-      console.log('Missing scene or manifold data:', { scene: !!sceneRef.current, manifoldData });
-      return;
-    }
-    console.log('Updating manifold:', manifoldData.type);
-
-    // Clear existing objects
-    sceneRef.current.children = sceneRef.current.children.filter(child => {
-      if (child instanceof THREE.Mesh || child instanceof THREE.LineSegments) {
-        child.geometry.dispose();
-        child.material.dispose();
-        return false;
-      }
-      return true;
-    });
-
-    let geometry;
-    let material;
+    if (!containerRef.current) return;
 
     try {
-      switch (manifoldData.type) {
-        case 'sphere':
-          geometry = new THREE.SphereGeometry(2, 32, 32);
-          material = new THREE.MeshPhongMaterial({
-            color: 0x156289,
-            transparent: true,
-            opacity: 0.9, 
-            shininess: 100, 
-            side: THREE.DoubleSide,
-            specular: 0x444444 
-          });
-          break;
+      // Scene
+      const scene = new THREE.Scene();
+      scene.background = new THREE.Color(0xf5f5f5);
+      sceneRef.current = scene;
 
-        case 'torus':
-          geometry = new THREE.TorusGeometry(3, 1, 30, 30);
-           material = new THREE.MeshPhongMaterial({
-             color: 0x156289,
-             transparent: true,
-             opacity: 0.9,
-             shininess: 100,
-             side: THREE.DoubleSide,
-             specular: 0x444444
-           });
-           break;
+      // Camera
+      const camera = new THREE.PerspectiveCamera(
+        75,
+        containerRef.current.clientWidth / containerRef.current.clientHeight,
+        0.1,
+        1000
+      );
+      camera.position.set(5, 5, 5);
+      camera.lookAt(0, 0, 0);
+      cameraRef.current = camera;
 
-        case 'mobius':
-        case 'klein':
-        case 'projective':
-          if (manifoldData.surface) {
-            const [x, y, z] = manifoldData.surface;
-            const vertices = [];
-            for (let i = 0; i < x.length; i++) {
-              for (let j = 0; j < x[i].length; j++) {
-                vertices.push(x[i][j], y[i][j], z[i][j]);
-              }
-            }
-            geometry = new THREE.BufferGeometry();
-            geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
-            geometry.computeVertexNormals();
-            
-            material = new THREE.MeshPhongMaterial({
-              color: 0x156289,
-              transparent: true,
-              opacity: 0.85,
-              shininess: 50,
-              side: THREE.DoubleSide
-            });
-          }
-          break;
+      // Renderer
+      const renderer = new THREE.WebGLRenderer({
+        antialias: true,
+        alpha: true,
+      });
+      renderer.setSize(containerRef.current.clientWidth, containerRef.current.clientHeight);
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+      containerRef.current.appendChild(renderer.domElement);
+      rendererRef.current = renderer;
 
-        case 'hyperbolic':
-          geometry = new THREE.CircleGeometry(2, 64);
-          material = new THREE.MeshBasicMaterial({
-            color: 0x156289,
-            transparent: true,
-            opacity: 0.6,
-            side: THREE.DoubleSide,
-            wireframe: true
-          });
-          break;
-      }
+      // Controls
+      const controls = new OrbitControls(camera, renderer.domElement);
+      controls.enableDamping = true;
+      controls.dampingFactor = 0.05;
+      controls.minDistance = 3;
+      controls.maxDistance = 20;
+      controlsRef.current = controls;
 
-      if (geometry && material) {
-        const mesh = new THREE.Mesh(geometry, material);
-        mesh.name = 'manifold';
-        sceneRef.current.add(mesh);
+      // Lighting
+      const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+      scene.add(ambientLight);
 
-        if (manifoldData.type !== 'hyperbolic') {
-          const wireframe = new THREE.WireframeGeometry(geometry);
-          const wireframeMaterial = new THREE.LineBasicMaterial({
-            color: 0x000000,
-            transparent: true,
-            opacity: 0.2, 
-            linewidth: 1
-          });
-          const wireframeMesh = new THREE.LineSegments(wireframe, wireframeMaterial);
-          wireframeMesh.name = 'manifold-wireframe';
-          sceneRef.current.add(wireframeMesh);
-        }
+      const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+      directionalLight.position.set(5, 5, 5);
+      scene.add(directionalLight);
 
-        // Reset camera and controls based on manifold type
-        if (cameraRef.current && controlsRef.current) {
-          switch (manifoldData.type) {
-            case 'hyperbolic':
-              cameraRef.current.position.set(0, 0, 8);
-              break;
-            case 'torus':
-              cameraRef.current.position.set(6, 6, 6);
-              break;
-            case 'klein':
-            case 'mobius':
-              cameraRef.current.position.set(5, 5, 8);
-              break;
-            default:
-              cameraRef.current.position.set(5, 5, 5);
-          }
+      // Grid helper and axes
+      const gridHelper = new THREE.GridHelper(10, 10, 0x888888, 0x444444);
+      gridHelper.material.opacity = 0.2;
+      gridHelper.material.transparent = true;
+      scene.add(gridHelper);
 
-          cameraRef.current.lookAt(0, 0, 0);
-          controlsRef.current.target.set(0, 0, 0);
+      const axesHelper = new THREE.AxesHelper(3);
+      scene.add(axesHelper);
+
+      // Animation loop
+      const animate = () => {
+        requestAnimationFrame(animate);
+        if (controlsRef.current) {
           controlsRef.current.update();
         }
-      }
+        renderer.render(scene, camera);
+      };
+      animate();
+
+      // Handle window resize
+      const handleResize = () => {
+        if (!containerRef.current) return;
+        const width = containerRef.current.clientWidth;
+        const height = containerRef.current.clientHeight;
+        camera.aspect = width / height;
+        camera.updateProjectionMatrix();
+        renderer.setSize(width, height);
+      };
+      window.addEventListener('resize', handleResize);
+
+      return () => {
+        window.removeEventListener('resize', handleResize);
+        renderer.dispose();
+        scene.traverse((object) => {
+          if (object instanceof THREE.Mesh) {
+            object.geometry.dispose();
+            object.material.dispose();
+          }
+        });
+        containerRef.current?.removeChild(renderer.domElement);
+      };
     } catch (error) {
-      console.error('Error creating manifold:', error);
-      setError('Failed to create manifold visualization');
+      console.error('Failed to initialize 3D viewer:', error);
+      setError('Failed to initialize 3D viewer');
+    }
+  }, []);
+
+  // Update manifold visualization
+  useEffect(() => {
+    if (!sceneRef.current || !manifoldData) return;
+
+    const scene = sceneRef.current;
+    
+    // Remove existing manifold and its children
+    const existingManifold = scene.getObjectByName('manifold');
+    if (existingManifold) {
+      existingManifold.traverse((child) => {
+        if (child.geometry) child.geometry.dispose();
+        if (child.material) {
+          if (Array.isArray(child.material)) {
+            child.material.forEach(m => m.dispose());
+          } else {
+            child.material.dispose();
+          }
+        }
+      });
+      scene.remove(existingManifold);
+    }
+
+    console.log('Creating manifold:', manifoldData.type);
+
+    // Create new manifold based on type
+    let geometry;
+    const radius = manifoldData.radius || 2;
+
+    switch (manifoldData.type) {
+      case 'sphere':
+        geometry = new THREE.SphereGeometry(radius, 64, 32);
+        break;
+      case 'torus':
+        geometry = new THREE.TorusGeometry(3, 1, 48, 64);
+        break;
+      case 'mobius':
+        // Create Möbius strip
+        geometry = new THREE.ParametricGeometry((u, v, target) => {
+          u = u * Math.PI * 2;
+          v = v * 2 - 1;
+          const r = 3;
+          const halfWidth = 1;
+          target.x = (r + halfWidth * v * Math.cos(u/2)) * Math.cos(u);
+          target.y = (r + halfWidth * v * Math.cos(u/2)) * Math.sin(u);
+          target.z = halfWidth * v * Math.sin(u/2);
+        }, 100, 20);
+        break;
+      case 'klein':
+        // Create Klein bottle approximation
+        geometry = new THREE.ParametricGeometry((u, v, target) => {
+          u = u * Math.PI * 2;
+          v = v * Math.PI * 2;
+          const a = 3;
+          const n = 4;
+          target.x = (a + Math.cos(u/2) * Math.sin(v) - Math.sin(u/2) * Math.sin(2*v)) * Math.cos(u);
+          target.y = (a + Math.cos(u/2) * Math.sin(v) - Math.sin(u/2) * Math.sin(2*v)) * Math.sin(u);
+          target.z = Math.sin(u/2) * Math.sin(v) + Math.cos(u/2) * Math.sin(2*v);
+        }, 100, 20);
+        break;
+      case 'hyperbolic':
+        // Create hyperbolic paraboloid
+        geometry = new THREE.ParametricGeometry((u, v, target) => {
+          u = (u - 0.5) * 4;
+          v = (v - 0.5) * 4;
+          target.x = u;
+          target.y = v;
+          target.z = (u*u - v*v) / 4;
+        }, 50, 50);
+        break;
+      case 'projective':
+        // Create Boy's surface (projective plane)
+        geometry = new THREE.ParametricGeometry((u, v, target) => {
+          u = u * Math.PI * 2;
+          v = v * Math.PI;
+          const r = 2;
+          const x = r * Math.cos(u) * Math.sin(v);
+          const y = r * Math.sin(u) * Math.sin(v);
+          const z = r * Math.cos(v);
+          target.x = x;
+          target.y = y;
+          target.z = z;
+        }, 100, 50);
+        break;
+      default:
+        geometry = new THREE.SphereGeometry(radius, 64, 32);
+    }
+
+    // Create materials
+    const material = new THREE.MeshPhongMaterial({
+      color: 0x156289,
+      transparent: true,
+      opacity: 0.8,
+      side: THREE.DoubleSide,
+      wireframe: false,
+      flatShading: manifoldData.type === 'klein' || manifoldData.type === 'mobius'
+    });
+
+    const manifold = new THREE.Mesh(geometry, material);
+    manifold.name = 'manifold';
+    
+    // Add wireframe
+    const wireframe = new THREE.WireframeGeometry(geometry);
+    const wireframeMaterial = new THREE.LineBasicMaterial({
+      color: 0x000000,
+      opacity: 0.1,
+      transparent: true
+    });
+    const wireframeMesh = new THREE.LineSegments(wireframe, wireframeMaterial);
+    manifold.add(wireframeMesh);
+    
+    scene.add(manifold);
+
+    // Adjust camera position based on manifold type
+    if (cameraRef.current) {
+      switch (manifoldData.type) {
+        case 'hyperbolic':
+          cameraRef.current.position.set(0, 0, 10);
+          break;
+        case 'torus':
+          cameraRef.current.position.set(8, 8, 8);
+          break;
+        case 'klein':
+        case 'mobius':
+          cameraRef.current.position.set(7, 7, 7);
+          break;
+        default:
+          cameraRef.current.position.set(5, 5, 5);
+      }
+      cameraRef.current.lookAt(0, 0, 0);
+      if (controlsRef.current) {
+        controlsRef.current.target.set(0, 0, 0);
+        controlsRef.current.update();
+      }
     }
   }, [manifoldData]);
 
-  // Handle trajectory updates
+  // Update trajectory and agent visualization
   useEffect(() => {
     if (!sceneRef.current || !trajectory?.length) return;
 
-    const oldLine = sceneRef.current.getObjectByName('trajectory');
-    const oldParticle = sceneRef.current.getObjectByName('particle');
+    const scene = sceneRef.current;
     
-    if (oldLine) {
-      sceneRef.current.remove(oldLine);
-      oldLine.geometry.dispose();
-      oldLine.material.dispose();
+    // Remove existing trajectory
+    const existingTrajectory = scene.getObjectByName('trajectory');
+    if (existingTrajectory) {
+      scene.remove(existingTrajectory);
+      existingTrajectory.geometry.dispose();
+      existingTrajectory.material.dispose();
     }
-    
-    if (oldParticle) {
-      sceneRef.current.remove(oldParticle);
-      oldParticle.geometry.dispose();
-      oldParticle.material.dispose();
+
+    // Remove existing agent
+    const existingAgent = scene.getObjectByName('agent');
+    if (existingAgent) {
+      scene.remove(existingAgent);
+      existingAgent.geometry.dispose();
+      existingAgent.material.dispose();
     }
 
     // Create trajectory line
     const points = trajectory.map(point => new THREE.Vector3(...point));
-    const lineGeometry = new THREE.BufferGeometry().setFromPoints(points);
-    const lineMaterial = new THREE.LineBasicMaterial({ 
+    const trajectoryGeometry = new THREE.BufferGeometry().setFromPoints(points);
+    const trajectoryMaterial = new THREE.LineBasicMaterial({
       color: 0xff0000,
-      linewidth: 2
+      linewidth: 2,
     });
-    const line = new THREE.Line(lineGeometry, lineMaterial);
-    line.name = 'trajectory';
-    sceneRef.current.add(line);
+    const trajectoryLine = new THREE.Line(trajectoryGeometry, trajectoryMaterial);
+    trajectoryLine.name = 'trajectory';
+    scene.add(trajectoryLine);
 
-    // Create particle at current position
+    // Create agent (particle)
     if (points.length > 0) {
-      const particleGeometry = new THREE.SphereGeometry(0.1, 16, 16);
-      const particleMaterial = new THREE.MeshBasicMaterial({ 
+      const agentGeometry = new THREE.SphereGeometry(0.1, 16, 16);
+      const agentMaterial = new THREE.MeshPhongMaterial({
         color: 0xff0000,
-        opacity: 1,
-        transparent: false
+        emissive: 0xff0000,
+        emissiveIntensity: 0.5,
       });
-      const particle = new THREE.Mesh(particleGeometry, particleMaterial);
-      particle.position.copy(points[points.length - 1]);
-      particle.name = 'particle';
-      sceneRef.current.add(particle);
+      const agent = new THREE.Mesh(agentGeometry, agentMaterial);
+      agent.position.copy(points[points.length - 1]);
+      agent.name = 'agent';
+      scene.add(agent);
+
+      // Add point light to agent
+      const pointLight = new THREE.PointLight(0xff0000, 1, 2);
+      pointLight.position.copy(agent.position);
+      agent.add(pointLight);
     }
   }, [trajectory]);
 
+  // Handle play/pause state
+  useEffect(() => {
+    if (controlsRef.current) {
+      controlsRef.current.autoRotate = isPlaying;
+      controlsRef.current.autoRotateSpeed = 1.0;
+    }
+  }, [isPlaying]);
+
   return (
-    <div className="w-full h-96 relative">
+    <div className="w-full h-96 relative bg-gray-100">
       {error ? (
-        <div className="w-full h-full flex items-center justify-center bg-red-50 text-red-600">
+        <div className="w-full h-full flex items-center justify-center text-red-600">
           {error}
         </div>
       ) : (
-        <canvas 
-          ref={canvasRef}
-          className="w-full h-full"
-          style={{ display: 'block' }}
-        />
+        <div ref={containerRef} className="w-full h-full" />
       )}
     </div>
   );

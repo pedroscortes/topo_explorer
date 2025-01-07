@@ -32,103 +32,75 @@ const WS_URL = 'ws://localhost:8765';
 const WS_RETRY_DELAY = 5000;
 const WS_CLOSE_NORMAL = 1000;
 
+const MANIFOLDS = [
+  { id: 'sphere', label: 'Sphere' },
+  { id: 'torus', label: 'Torus' },
+  { id: 'mobius', label: 'Möbius Strip' },
+  { id: 'klein', label: 'Klein Bottle' },
+  { id: 'hyperbolic', label: 'Hyperbolic' },
+  { id: 'projective', label: 'Projective' }
+];
+
 const ManifoldExplorer = () => {
   const wsRef = useRef(null);
-  const reconnectTimeoutRef = useRef(null);
   const [connectionStatus, setConnectionStatus] = useState('disconnected');
   const [error, setError] = useState(null);
   const [viewMode, setViewMode] = useState('3d');
   const [isPlaying, setIsPlaying] = useState(false);
   const [isTraining, setIsTraining] = useState(false);
   const [selectedManifold, setSelectedManifold] = useState('sphere');
-  const [manifoldData, setManifoldData] = useState({
-    type: 'sphere',
-    surface: null
-  });
+  const [manifoldData, setManifoldData] = useState({ type: 'sphere', surface: null });
   const [trajectory, setTrajectory] = useState([]);
   const [metrics, setMetrics] = useState({
     exploration: [],
     curvature: [],
     training: []
   });
-  const [isChangingManifold, setIsChangingManifold] = useState(false);
 
-  const ManifoldSelector = () => {
-    const manifolds = [
-      { id: 'sphere', label: 'Sphere' },
-      { id: 'torus', label: 'Torus' },
-      { id: 'mobius', label: 'Möbius Strip' },
-      { id: 'klein', label: 'Klein Bottle' },
-      { id: 'hyperbolic', label: 'Hyperbolic' },
-      { id: 'projective', label: 'Projective' }
-    ];
+  const handleManifoldChange = useCallback((manifoldId) => {
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      setSelectedManifold(manifoldId);
+      
+      const message = {
+        type: 'control',
+        data: {
+          action: 'change_manifold',
+          manifold: manifoldId
+        }
+      };
+      console.log('Sending manifold change message:', message);
+      wsRef.current.send(JSON.stringify(message));
+      
+      // Reset visualization state
+      setTrajectory([]);
+      setMetrics({
+        exploration: [],
+        curvature: [],
+        training: []
+      });
+    }
+  }, []);
 
-    const handleManifoldChange = (manifold) => {
-      if (isChangingManifold) return;
-
-      setIsChangingManifold(true);
-      console.log('Changing manifold to:', manifold);
-      setSelectedManifold(manifold);
-
-      if (wsRef.current?.readyState === WebSocket.OPEN) {
-        const message = {
-          type: 'set_manifold',
-          data: {
-            type: manifold
-          }
-        };
-        console.log('Sending manifold change message:', message);
-        wsRef.current.send(JSON.stringify(message));
-        
-        setTrajectory([]);
-        setMetrics({
-          exploration: [],
-          curvature: [],
-          training: []
-        });
-
-        setTimeout(() => {
-          setIsChangingManifold(false);
-        }, 500);
-      } else {
-        console.warn('WebSocket not connected, state:', wsRef.current?.readyState);
-        setError('Connection lost. Trying to reconnect...');
-        connectWebSocket();
-        setIsChangingManifold(false);
-      }
-    };
-
-    return (
-      <div className="bg-white rounded-lg shadow p-4">
-        <div className="space-y-2">
-          {manifolds.map((manifold) => (
-            <div key={manifold.id} className="flex items-center">
-              <input
-                type="radio"
-                id={manifold.id}
-                name="manifold"
-                value={manifold.id}
-                checked={selectedManifold === manifold.id}
-                onChange={() => handleManifoldChange(manifold.id)}
-                className="w-4 h-4 text-blue-600 cursor-pointer"
-                disabled={isChangingManifold}
-              />
-              <label
-                htmlFor={manifold.id}
-                className="ml-2 text-sm font-medium text-gray-700 cursor-pointer"
-              >
-                {manifold.label}
-              </label>
-            </div>
-          ))}
-        </div>
-      </div>
-    );
-  };
-
-  const handlePlayToggle = () => {
-    setIsPlaying(prev => !prev);
-  };
+  const ManifoldSelector = () => (
+    <div className="bg-white rounded-lg shadow p-4 space-y-2">
+      {MANIFOLDS.map(({ id, label }) => (
+        <label 
+          key={id} 
+          className="flex items-center space-x-2 cursor-pointer"
+        >
+          <input
+            type="radio"
+            name="manifold"
+            value={id}
+            checked={selectedManifold === id}
+            onChange={() => handleManifoldChange(id)}
+            className="form-radio text-blue-600"
+          />
+          <span className="text-sm">{label}</span>
+        </label>
+      ))}
+    </div>
+  );
 
   const handleVisualizationUpdate = useCallback((message) => {
     if (!message.type || !message.data) {
@@ -173,7 +145,7 @@ const ManifoldExplorer = () => {
           break;
 
         case 'status':
-          if (message.data.hasOwnProperty('training')) {
+          if ('training' in message.data) {
             setIsTraining(message.data.training);
             console.log('Training status updated:', message.data.training);
           }
@@ -203,102 +175,59 @@ const ManifoldExplorer = () => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
       wsRef.current.close();
     }
-  
-    try {
-      console.log('Attempting WebSocket connection...');
-      const ws = new WebSocket(WS_URL);
-      let connectionTimeout = setTimeout(() => {
-        console.log('Connection timeout, retrying...');
-        ws.close();
-      }, 5000); 
-  
-      ws.onopen = () => {
-        clearTimeout(connectionTimeout);
-        console.log('WebSocket Connected');
-        setConnectionStatus('connected');
-        setError(null);
-        wsRef.current = ws;
-  
-        try {
-          const initMessage = {
-            type: 'init',
-            data: { 
-              clientId: Math.random().toString(36).substr(2, 9),
-              manifold: selectedManifold
-            }
-          };
-          ws.send(JSON.stringify(initMessage));
-          console.log('Sent init message:', initMessage);
-        } catch (err) {
-          console.error('Failed to send init message:', err);
+
+    console.log('Establishing WebSocket connection...');
+    const ws = new WebSocket(WS_URL);
+    wsRef.current = ws;
+
+    ws.onopen = () => {
+      console.log('WebSocket Connected');
+      setConnectionStatus('connected');
+      setError(null);
+
+      // Send init message
+      const initMessage = {
+        type: 'init',
+        data: { 
+          clientId: Math.random().toString(36).substr(2, 9),
+          manifold: selectedManifold
         }
       };
-  
-      ws.onclose = (event) => {
-        clearTimeout(connectionTimeout);
-        console.log('WebSocket closed:', event.code, event.reason);
-        setConnectionStatus('disconnected');
-        wsRef.current = null;
-  
-        if (event.code !== WS_CLOSE_NORMAL) {
-          console.log('Attempting to reconnect in 5 seconds...');
-          setTimeout(connectWebSocket, WS_RETRY_DELAY);
-        }
-      };
-  
-      ws.onerror = (error) => {
-        console.error('WebSocket error:', error);
-        setError('Connection error. Retrying...');
-        clearTimeout(connectionTimeout);
-        
-        if (ws.readyState !== WebSocket.CLOSED) {
-          ws.close();
-        }
-      };
-  
-      ws.onmessage = (event) => {
-        try {
-          const message = JSON.parse(event.data);
-          console.log('Received message:', message);
-          handleVisualizationUpdate(message);
-        } catch (error) {
-          console.error('Error processing message:', error);
-        }
-      };
-  
-    } catch (error) {
-      console.error('Failed to create WebSocket:', error);
-      setError('Connection failed. Retrying...');
+      ws.send(JSON.stringify(initMessage));
+    };
+
+    ws.onclose = () => {
+      console.log('WebSocket disconnected');
+      setConnectionStatus('disconnected');
+      wsRef.current = null;
+      
+      // Attempt to reconnect after delay
       setTimeout(connectWebSocket, WS_RETRY_DELAY);
-    }
-  
-    return () => {
-      if (wsRef.current?.readyState === WebSocket.OPEN) {
-        wsRef.current.close(WS_CLOSE_NORMAL);
+    };
+
+    ws.onerror = (error) => {
+      console.error('WebSocket error:', error);
+      setError('Connection error occurred');
+    };
+
+    ws.onmessage = (event) => {
+      try {
+        const message = JSON.parse(event.data);
+        handleVisualizationUpdate(message);
+      } catch (error) {
+        console.error('Error processing message:', error);
       }
     };
   }, [handleVisualizationUpdate, selectedManifold]);
 
-  useEffect(() => {
-    connectWebSocket();
-    
-    return () => {
-      if (wsRef.current?.readyState === WebSocket.OPEN) {
-        wsRef.current.close(WS_CLOSE_NORMAL);
-      }
-    };
-  }, [connectWebSocket]);
-
+  // Single WebSocket connection effect
   useEffect(() => {
     console.log('Component mounted, establishing WebSocket connection');
     connectWebSocket();
 
     return () => {
       console.log('Component unmounting, cleaning up WebSocket');
-      if (reconnectTimeoutRef.current) {
-        clearTimeout(reconnectTimeoutRef.current);
-      }
-      if (wsRef.current) {
+      if (wsRef.current?.readyState === WebSocket.OPEN) {
         wsRef.current.close(WS_CLOSE_NORMAL, 'Component unmounting');
       }
     };
@@ -393,7 +322,7 @@ const ManifoldExplorer = () => {
               Training
             </Button>
             <Button 
-              onClick={handlePlayToggle}
+              onClick={() => setIsPlaying(!isPlaying)}
               variant={isPlaying ? 'default' : 'outline'}
             >
               {isPlaying ? 'Pause' : 'Play'}
@@ -410,7 +339,9 @@ const ManifoldExplorer = () => {
   
           <Card className="mt-4">
             <CardContent>
-              <ExplorationView explorationData={trajectory} />
+              <ExplorationView 
+                explorationData={trajectory}
+              />
             </CardContent>
           </Card>
         </div>

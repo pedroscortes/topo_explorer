@@ -99,17 +99,23 @@ class ManifoldVisWebSocket:
         """Broadcast data to all connected clients."""
         if not self.clients:
             return
-            
+                
         try:
             processed_data = self._process_data(data)
+            if not processed_data:
+                logger.error("Failed to process data for broadcast")
+                return
+                
             message = json.dumps(processed_data)
-            logger.debug(f"Broadcasting {processed_data['type']} data: {processed_data['data']}")
+            logger.debug(f"Broadcasting {processed_data['type']} data")
             
             disconnected = set()
             for client in self.clients:
                 try:
                     await client.send(message)
+                    logger.debug(f"Successfully sent data to client")
                 except websockets.exceptions.ConnectionClosed:
+                    logger.warning(f"Client connection closed")
                     disconnected.add(client)
                 except Exception as e:
                     logger.error(f"Error sending to client: {e}")
@@ -117,31 +123,42 @@ class ManifoldVisWebSocket:
                     
             for client in disconnected:
                 await self.unregister(client)
-                
+                    
         except Exception as e:
-            logger.error(f"Error in broadcast: {e}")
+            logger.error(f"Error in broadcast: {e}", exc_info=True)
     
     def _process_data(self, data: VisualizationData) -> Dict:
         """Process data for JSON serialization."""
-        def convert_numpy(obj):
-            if isinstance(obj, np.ndarray):
-                return obj.tolist()
-            elif isinstance(obj, dict):
-                return {k: convert_numpy(v) for k, v in obj.items()}
-            elif isinstance(obj, list):
-                return [convert_numpy(i) for i in obj]
-            elif isinstance(obj, (np.int64, np.int32)):
-                return int(obj)
-            elif isinstance(obj, (np.float64, np.float32)):
-                return float(obj)
-            elif isinstance(obj, tuple):  
-                return list(convert_numpy(i) for i in obj)
-            return obj
+        try:
+            processed = asdict(data)
+            
+            # Handle surface data specifically
+            if 'surface' in processed['data']:
+                surface = processed['data']['surface']
+                if isinstance(surface, tuple):
+                    processed['data']['surface'] = {
+                        'x': surface[0].tolist(),
+                        'y': surface[1].tolist(),
+                        'z': surface[2].tolist()
+                    }
+                    
+            # Convert all numpy arrays to lists
+            def convert_numpy(obj):
+                if isinstance(obj, np.ndarray):
+                    return obj.tolist()
+                elif isinstance(obj, dict):
+                    return {k: convert_numpy(v) for k, v in obj.items()}
+                elif isinstance(obj, list):
+                    return [convert_numpy(i) for i in obj]
+                return obj
                 
-        processed = asdict(data)
-        processed['data'] = convert_numpy(processed['data'])
-        return processed
-    
+            processed['data'] = convert_numpy(processed['data'])
+            return processed
+            
+        except Exception as e:
+            logger.error(f"Error processing data: {e}")
+            return None
+        
     async def handler(self, websocket, *args):  # Change this line to accept variable arguments
         """Handle incoming WebSocket connections."""
         try:
@@ -252,11 +269,13 @@ async def run_test_server():
                     logger.debug("Sent metrics update")
 
                     manifold_data = generator.generate_manifold_data()
-                    await server.broadcast(VisualizationData(
-                        type='manifold',
-                        data=manifold_data,
-                        timestamp=time.time()
-                    ))
+                    if manifold_data:  
+                        logger.info(f"Generated manifold data: {manifold_data}")  
+                        await server.broadcast(VisualizationData(
+                            type='manifold',
+                            data=manifold_data,
+                            timestamp=time.time()
+                        ))
                     logger.debug("Sent manifold update")
 
             except Exception as e:
